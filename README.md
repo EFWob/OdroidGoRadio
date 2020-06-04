@@ -2,6 +2,8 @@
 ## Caveat Emptor
 This is beta SW. 
 
+For testing, the SW runs without a VS1053 module connected. All buttons are fully functional, but there will be no noticable audio 
+output...
 
 ## Basic Idea
 This is a project to port the ESP32-Radio by Edzelf (see https://github.com/Edzelf/ESP32-Radio) to the Odroid-Go to use the 
@@ -11,9 +13,6 @@ It will compile in Arduino-IDE. You have to make sure to set the board to "ODROI
 to apply some changes to the base software.
 
 Note that this project is going on for quite some time already. I originally branched from Version "Thu, 14 Oct 2018 07:22:32 GMT".
-
-For testing, the radio runs without the VS1053 module. All buttons are fully functional, but there will be no noticable audio 
-output...
 
 The connection to the VS1053 is done through the Odroid-header pins as follows (schematic to follow):
 
@@ -65,9 +64,9 @@ perspective as well. The four buttons (Start, Menu etc.) on top of the screen (a
 referred to as "(1)" to "(4)" (from left to right upside down view).
 
 ## Possible Startup-Issue
-As said, the VS1053 is powered through USB. At least one of the header pins is connected to a strapping pin that alters the 
-bootup sequence. Sometimes (that depends: I have tested several combos and with some Odroid/VS pairs that means always, with 
-others never)the Odroid will not start properly when USB and VS1053 are connected and the Odroid is switched on. The safe 
+The VS1053 must be powered through USB. At least one of the GPIO header pins is connected to a strapping pin that alters the 
+bootup sequence. Sometimes (that depends: I have tested several combinations of Odroids and VS modules. For some that means 
+always, for others there was no issue at all) the Odroid will not start properly when USB and VS1053 are connected and the Odroid is switched on. The safe 
 sequence is to connected Odroid to VS1053, switch on the Odroid from battery and after this switch on USB power supply 
 (and thus power the VS1053). The timeframe between switching Odroid On and Power Up USB is in the range 0.5 to 4 seconds 
 (roughly).
