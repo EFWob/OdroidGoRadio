@@ -2385,7 +2385,6 @@ bool connectwifi()
     if ( wifilist.size() == 1 )                         // Just one AP defined in preferences?
     {
       winfo = wifilist[0] ;                             // Get this entry
-//      winfo.ssid = "JonaWiz";
       WiFi.begin ( winfo.ssid, winfo.passphrase ) ;     // Connect to single SSID found in wifi_xx
       dbgprint ( "Try WiFi %s:>%s<", winfo.ssid, winfo.passphrase ) ;          // Message to show during WiFi connect
       if (  WiFi.waitForConnectResult() != WL_CONNECTED )  { // Try to connect again  

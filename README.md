@@ -1,4 +1,7 @@
 # Odroid-Go-Radio
+## Caveat Emptor
+This is beta SW. 
+
 
 ## Basic Idea
 This is a project to port the ESP32-Radio by Edzelf (see https://github.com/Edzelf/ESP32-Radio) to the Odroid-Go to use the 
