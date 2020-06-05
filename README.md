@@ -46,7 +46,7 @@ password of the Access Point are changed to "ODROIDRadio". The IP will be the sa
 	* To start, it is sufficient to configure your WiFi credentials. 
 	* Connect your desktop PC to access point ODROIDRadio (Password ODROIDRadio) and open http://192.168.4.1/config.html
 	* Press Button (Default) to load the initial values.
-	* At the bottom of the input field, search for the entry wifi_00 = and set the line to wifi_00 = YourSSID/YourPassword
+	* Search for the entry wifi_00 = and set the line to wifi_00 = YourSSID/YourPassword
 	* Press buttons (Save) and (Restart) and you should be done (Observe screen output to check for success or Serial output 
 for more verbose debug information).
 * There are no available pins available for attaching functions to. Any settings in the configuration file are ignored.
