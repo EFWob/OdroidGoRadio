@@ -45,6 +45,7 @@ https://github.com/Edzelf/ESP32-Radio/blob/master/doc/ESP32-radio.pdf namely sec
 password of the Access Point are changed to "ODROIDRadio". The IP will be the same 192.168.194.1
 	* To start, it is sufficient to configure your WiFi credentials. 
 	* Connect your desktop PC to access point ODROIDRadio (Password ODROIDRadio) and open http://192.168.4.1/config.html
+	* Press Button (Default) to load the initial values.
 	* At the bottom of the input field, search for the entry wifi_00 = and set the line to wifi_00 = YourSSID/YourPassword
 	* Press buttons (Save) and (Restart) and you should be done (Observe screen output to check for success or Serial output 
 for more verbose debug information).
