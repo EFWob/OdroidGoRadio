@@ -1148,7 +1148,7 @@ class RadioMenu3: public RadioMenu {
       addEntry(_showDynamic = new RadioMenuEntryBool("Dynamic Brightness", &odroidRadioConfig.equalizer.spectrumAnalyzerDynamic));
       addEntry(_showPeaks = new RadioMenuEntrySpectrumColor("Show Peaks", &odroidRadioConfig.equalizer.spectrumAnalyzerPeaks, true));
       addEntry(_barWidth = new RadioMenuEntry("Bar width", &odroidRadioConfig.equalizer.spectrumAnalyzerWidth,0,10));
-      addEntry(_peakWidth = new RadioMenuEntryWidth("Peak width",  &odroidRadioConfig.equalizer.spectrumAnalyzerWidth));
+      addEntry(_peakWidth = new RadioMenuEntryWidth("Peak width",  &odroidRadioConfig.equalizer.spectrumAnalyzerPeakWidth));
       addEntry(_showSegments = new RadioMenuEntryWidth("Segm.Divider width", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentWidth));
       addEntry(_segmentColor = new RadioMenuEntrySpectrumColor("Segm.Divider color", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentColor));
       addEntry(_showText = new RadioMenuEntryBool("Show Radiotext", &odroidRadioConfig.equalizer.spectrumAnalyzerText));
