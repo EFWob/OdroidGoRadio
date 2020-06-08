@@ -756,6 +756,12 @@ class VS1053
       SPI.endTransaction() ;                      // Allow other SPI users
     }
 
+#if defined(ARDUINO_ODROID_ESP32)
+  public:
+    void loadUserCode(const uint16_t* plugin, size_t pluginSize);
+#endif    
+
+
     uint16_t    read_register ( uint8_t _reg ) const ;
     void        write_register ( uint8_t _reg, uint16_t _value ) const ;
     inline bool sdi_send_buffer ( uint8_t* data, size_t len ) ;
@@ -889,6 +895,29 @@ uint16_t VS1053::wram_read ( uint16_t address )
   write_register ( SCI_WRAMADDR, address ) ;            // Start reading from WRAM
   return read_register ( SCI_WRAM ) ;                   // Read back result
 }
+
+#if defined(ARDUINO_ODROID_ESP32)
+void VS1053::loadUserCode(const uint16_t* plugin, size_t pluginSize) {
+  int i = 0;
+  while (i < pluginSize) {
+    uint16_t addr, n, val;
+    addr = plugin[i++];
+    n = plugin[i++];
+    if (n & 0x8000U) {/* RLE run, replicate n samples */
+      n &= 0x7FFF;
+      val = plugin[i++];
+      while (n--) {
+        write_register(addr, val);
+      }
+    } else { /* Copy run, copy n samples */
+      while (n--) {
+        val = plugin[i++];
+        write_register(addr, val);
+      }
+    }
+  }
+}
+#endif
 
 bool VS1053::testComm ( const char *header )
 {
@@ -5952,6 +5981,10 @@ void handle_spec()
       displaybattery() ;                                      // Show battery charge on display
     }
   }
+#if defined(ARDUINO_ODROID_ESP32)
+//  extern void runSpectrumAnalyzer();
+//  runSpectrumAnalyzer();
+#endif  
   releaseSPI() ;                                              // Release SPI bus
   if ( mqtt_on )
   {

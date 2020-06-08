@@ -1,7 +1,8 @@
 #include "src/libraries/BasicStatemachineOdroid.h"
 #include "src/libraries/VirtualPinOdroid.h"
 #include "src/libraries/ButtonHandlerOdroid.h"
-#include <odroid_go.h>
+#include "src/libraries/Display.h"
+//#include <odroid_go.h>
 #include "OdroidExtra.h"
 
 extern char*       dbgprint( const char* format, ... ) ;
@@ -11,6 +12,50 @@ extern String nvsgetstr ( const char* key );
 class RadioMenu;
 bool nvssetOdroid();
 
+
+class SpectrumAnalyzer {
+   public:
+     void load();
+     bool activation(bool on);
+     bool isActive() {return _active && _valid;};
+     void run();
+     void run1();
+     void reStart() {_lastRun = 0;};
+     void showSpeed(uint8_t speed) {_showSpeed = speed;};
+     void showDynamic(bool dynamic) {_showDynamic = dynamic;};
+     void showPeaks(int16_t peaks) { _showPeaks = peaks;};
+     void showSegmentWidth(uint16_t segmentWidth) { _showSegments = segmentWidth;};
+     void showWidth(int16_t width) {_barWidth = width;};
+     void showPeakWidth(int16_t width) {_peakWidth = width;};
+     void showSegmentColor(int16_t col) {_showSegmentColor = col;};
+     void showText(bool showText) {_showText = showText;};
+     bool showText() {return _showText;};
+   protected:
+    const uint8_t _speedMap[6] = {0, 25, 50, 100, 200, 500};
+    uint8_t _showSpeed = 3;
+    bool readBands();
+    const uint8_t SCI_WRAM          = 0x6 ;
+    const uint8_t SCI_WRAMADDR      = 0x7 ;    
+    uint8_t _bands = 14;
+    uint16_t _base = 0x1810;    //spectrumAnalyzerAppl1053b-2.plg
+    int16_t _barWidth = 3;
+    int16_t _peakWidth = -1;
+    bool _valid = false;
+    bool _showDynamic = false;
+    int16_t _showPeaks = 1;
+    int16_t _showSegments = -1;
+    int16_t _showSegmentColor = 0;
+    bool _active = false;  
+    bool _showText = false;
+    uint8_t _drawn = 0;
+    uint32_t _readTime = 0;
+    uint32_t _lastRun = 0;
+    uint8_t _spectrum[14][4];
+    bool _dynamicBrightness = false;
+
+    uint16_t getColor(int16_t code);
+
+} spectrumAnalyzer;
 
 
 
@@ -73,20 +118,40 @@ struct {
   } sleep;
   struct {
     int16_t max = 255;            // maximum Backlight value
-    int16_t min = 4;              // minimum backlight value
+    int16_t min = 255;            // minimum backlight value (if equal to max, effectively no dimming will happen)
   } backlight;
 
   struct {
     int16_t closeListOnSelect = 1;
     int16_t favBanks = 3;
     int16_t ignoreSD = 1;
-    int16_t keySpeed = 1;
+    int16_t keySpeed = 2;
     int16_t debug = 1;
   } misc;
   struct {
     int16_t preset = 1;
   } start;
+  struct {
+    int16_t showSpectrumAnalyzer = 0;
+    int16_t spectrumAnalyzerSpeed = 3;
+    int16_t spectrumAnalyzerDynamic = 0;
+    int16_t spectrumAnalyzerPeaks = 1;
+    int16_t spectrumAnalyzerSegmentWidth = -1;
+    int16_t spectrumAnalyzerWidth = 3;
+    int16_t spectrumAnalyzerText = 0;
+    int16_t spectrumAnalyzerPeakWidth = -1;
+    int16_t spectrumAnalyzerSegmentColor = 0;  
+    int16_t eq0 = 0;
+    int16_t eq1 = 0;
+    int16_t eq2 = 0;
+    int16_t eq3 = 0;
+    int16_t eq4 = 0;
+    int16_t eq5 = 0;
+    int16_t eq6 = 0;
+    int16_t eq7 = 0;
+  } equalizer;
 } odroidRadioConfig;
+
 
 
 
@@ -310,7 +375,7 @@ class RadioMenuEntry {
 
     friend class RadioMenu;
     friend class RadioMenu2;
-
+    friend class RadioMenu3;
 };
 
 class RadioMenuEntryKeySpeed : public RadioMenuEntry {
@@ -349,6 +414,70 @@ class RadioMenuEntryBool : public RadioMenuEntry {
     };
 
 };
+
+class RadioMenuEntrySpectrumSpeed : public RadioMenuEntry {
+  public:
+    RadioMenuEntrySpectrumSpeed(char* txt, int16_t *reference):
+          RadioMenuEntry(txt, reference, 0, 5) {};
+
+    virtual char *getValueString() {
+    char *values[] = {"Disco", "Hectic", "Fast", "Smooth", "Slow", "Slug"}; 
+      if (_reference) {
+        sprintf(_valueStr, "%6s", values[_value]);
+      } else
+        strcpy(_valueStr, "");
+      return _valueStr;
+    };
+
+};
+
+
+class RadioMenuEntrySpectrumColor : public RadioMenuEntry {
+  public:
+    RadioMenuEntrySpectrumColor(char* txt, int16_t *reference, bool blackIsOff = false):
+          RadioMenuEntry(txt, reference, -1, 10) {
+              if (_blackIsOff = blackIsOff) {
+                _minVal = 0;
+                read();
+              }
+            };
+
+    virtual char *getValueString() {
+    char *values[] = {"Black", "White", "Grey", "Red", "Green", "Blue", "Cyan", "Yellow", "Purple", "Olive", "Magenta"}; 
+      if (_reference) {
+        if ((_value == -1) || ((_value == 0) && _blackIsOff))
+          strcpy(_valueStr, "    OFF");
+        else 
+          sprintf(_valueStr, "%7s", values[_value]);
+      } else
+        strcpy(_valueStr, "");
+      return _valueStr;
+    };
+  protected:
+    bool _blackIsOff;
+};
+
+class RadioMenuEntryWidth : public RadioMenuEntry {
+  public:
+    RadioMenuEntryWidth(char* txt, int16_t *reference):
+          RadioMenuEntry(txt, reference, -1, 10) {
+              };
+
+    virtual char *getValueString() {
+      if (_reference) {
+        if (_value == -1)
+          strcpy(_valueStr, "same");
+        else if (0 == _value)
+          strcpy(_valueStr, " off");
+        else 
+          sprintf(_valueStr, "%4d", _value);
+      }  else
+        strcpy(_valueStr, "");
+      return _valueStr;
+    };
+};
+
+
 
 class RadioMenuEntryBriUp : public RadioMenuEntry {
   public:
@@ -625,6 +754,7 @@ class RadioMenu {
         entry->save();
         entry = entry->_next;
       }
+      _updated = false;
       nvssetOdroid();
     };
 
@@ -1006,11 +1136,66 @@ class RadioMenu2: public RadioMenu {
 
 };
 
+
 class RadioMenu3: public RadioMenu {
   public:
-    RadioMenu3() : RadioMenu() {
+    RadioMenu3() : RadioMenu("Equalizer") {
+      addEntry(new RadioMenuEntry("--- Equalizer Settings ---"));
+      addEntry(new RadioMenuEntry("  ... to be done..."));
+      addEntry(new RadioMenuEntry("--- Spectrum Analyzer ----"));
+      addEntry(_showSpectrum = new RadioMenuEntryBool("Show Spectrum Analyzer", &odroidRadioConfig.equalizer.showSpectrumAnalyzer));
+      addEntry(_showSpeed = new RadioMenuEntrySpectrumSpeed("Analyzer Speed", &odroidRadioConfig.equalizer.spectrumAnalyzerSpeed));
+      addEntry(_showDynamic = new RadioMenuEntryBool("Dynamic Brightness", &odroidRadioConfig.equalizer.spectrumAnalyzerDynamic));
+      addEntry(_showPeaks = new RadioMenuEntrySpectrumColor("Show Peaks", &odroidRadioConfig.equalizer.spectrumAnalyzerPeaks, true));
+      addEntry(_barWidth = new RadioMenuEntry("Bar width", &odroidRadioConfig.equalizer.spectrumAnalyzerWidth,0,10));
+      addEntry(_peakWidth = new RadioMenuEntryWidth("Peak width",  &odroidRadioConfig.equalizer.spectrumAnalyzerWidth));
+      addEntry(_showSegments = new RadioMenuEntryWidth("Segm.Divider width", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentWidth));
+      addEntry(_segmentColor = new RadioMenuEntrySpectrumColor("Segm.Divider color", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentColor));
+      addEntry(_showText = new RadioMenuEntryBool("Show Radiotext", &odroidRadioConfig.equalizer.spectrumAnalyzerText));
     };
+
+    void menuButton(uint8_t button, uint16_t repeats) {
+      bool showSpectrum = _showSpectrum->value();
+      int16_t spectrumSpeed = _showSpeed->value();
+      bool showDynamic = _showDynamic->value();
+      bool showPeaks = _showPeaks->value();
+      int16_t showSegments = _showSegments->value();
+      int16_t barWidth = _barWidth->value();
+      bool showText = _showText->value();
+      int16_t peakWidth = _peakWidth->value();
+      int16_t segmentColor = _segmentColor->value();
+      RadioMenu::menuButton(button, repeats);
+      if (showSpectrum != _showSpectrum->value())
+        spectrumAnalyzer.activation(!showSpectrum);
+      else if (spectrumSpeed != _showSpeed->value())
+        spectrumAnalyzer.showSpeed(_showSpeed->value());
+      else if (showDynamic != _showDynamic->value())
+        spectrumAnalyzer.showDynamic(_showDynamic->value());
+      else if (showPeaks != _showPeaks->value())
+        spectrumAnalyzer.showPeaks(_showPeaks->value());
+      else if (showSegments != _showSegments->value())
+        spectrumAnalyzer.showSegmentWidth(_showSegments->value());
+      else if (barWidth != _barWidth->value())
+        spectrumAnalyzer.showWidth(_barWidth->value());
+      else if (showText != _showText->value())
+        spectrumAnalyzer.showText(_showText->value());
+      else if (peakWidth != _peakWidth->value())
+        spectrumAnalyzer.showPeakWidth(_peakWidth->value());
+      else if (segmentColor = _segmentColor->value())
+        spectrumAnalyzer.showSegmentColor(_segmentColor->value());
+    };
+    protected:
+      RadioMenuEntryBool* _showSpectrum;
+      RadioMenuEntryBool* _showDynamic;
+      RadioMenuEntrySpectrumColor* _showPeaks;
+      RadioMenuEntrySpectrumColor* _segmentColor;
+      RadioMenuEntry* _barWidth;
+      RadioMenuEntryWidth* _showSegments;
+      RadioMenuEntrySpectrumSpeed* _showSpeed;
+      RadioMenuEntryBool* _showText;
+      RadioMenuEntryWidth* _peakWidth;
 };
+
 
 class RadioSleepMenu: public RadioMenu {
   public:
@@ -1440,7 +1625,7 @@ void odroidSetup() {
 
     btnStart.onPressed([]() {handleBtnMemory(1);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(1);});
     btnSelect.onPressed([](){handleBtnMemory(2);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(2);});
-    btnVol.onPressed([]() {handleBtnMemory(3);});
+    btnVol.onPressed([]() {handleBtnMemory(3);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(3);});
     btnMenu.onPressed([]() {handleBtnMemory(4);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(4);});
     btnA.onLongPressed([](uint16_t) {handleBtnAB(0);}).onLongReleased([]() {handleBtnAB(0, true);});
     btnB.onLongPressed([](uint16_t) {handleBtnAB(1);}).onLongReleased([]() {handleBtnAB(1, true);});
@@ -1465,10 +1650,12 @@ void odroidSetup() {
     }  
 }
 
-void odroidRadioFirstLoopSetup() {
+bool odroidRadioFirstLoopSetup() {
+static uint8_t step = 0;
 char s[50];
 int16_t iniVolume;
 // setup initial volume
+  if (0 == step) {
     iniVolume = odroidRadioConfig.volume.useStart?odroidRadioConfig.volume.start:ini_block.reqvol; 
     if (iniVolume >= odroidRadioConfig.volume.max)
       iniVolume = odroidRadioConfig.volume.max;
@@ -1498,21 +1685,37 @@ int16_t iniVolume;
         }     
       radioStatemachine._menu[0] = new RadioMenu1;  
       radioStatemachine._menu[1] = new RadioMenu2;
+//      radioStateMachine._menu[2] = new RadioMenu3;
   if (!NetworkFound)
     radioStatemachine.setState(RADIOSTATE_INICONFIG);
   else if (odroidVsError)
     radioStatemachine.setState(RADIOSTATE_INIVS);
   else
     radioStatemachine.resetStateTime();
+  } else if (1 == step) {
+    spectrumAnalyzer.load();
+    spectrumAnalyzer.activation(odroidRadioConfig.equalizer.showSpectrumAnalyzer);
+    spectrumAnalyzer.showSpeed(odroidRadioConfig.equalizer.spectrumAnalyzerSpeed);
+    spectrumAnalyzer.showDynamic(odroidRadioConfig.equalizer.spectrumAnalyzerDynamic);
+    spectrumAnalyzer.showPeaks(odroidRadioConfig.equalizer.spectrumAnalyzerPeaks);
+    spectrumAnalyzer.showSegmentWidth(odroidRadioConfig.equalizer.spectrumAnalyzerSegmentWidth);
+    spectrumAnalyzer.showSegmentColor(odroidRadioConfig.equalizer.spectrumAnalyzerSegmentColor);
+    spectrumAnalyzer.showWidth(odroidRadioConfig.equalizer.spectrumAnalyzerWidth);
+    spectrumAnalyzer.showText(odroidRadioConfig.equalizer.spectrumAnalyzerText);
+    spectrumAnalyzer.showPeakWidth(odroidRadioConfig.equalizer.spectrumAnalyzerPeakWidth);
+  }
+  step++;
+  return step < 2;
 }
 
 void odroidLoop(void) {    
 static bool first = true;
   if (first) {
-    odroidRadioFirstLoopSetup();
-    first = false;
+    first = odroidRadioFirstLoopSetup();
+    dbgprint("First loop setup done!");
   } else {
     StatemachineLooper.run();
+    runSpectrumAnalyzer();
   }
 }
 
@@ -1536,9 +1739,11 @@ bool displayFlipped = false;
 
 bool dsp_begin()
 {
-  GO.lcd.begin();
-  tft = &GO.lcd;
-  GO.lcd.setBrightness(brightnessLevel);
+//  GO.lcd.begin();
+//  tft = &GO.lcd;
+//  GO.lcd.setBrightness(brightnessLevel);
+  tft = new ILI9341();
+  tft->begin();
   odroidSetup();
   dsp_setRotation();
   return ( tft != NULL ) ;
@@ -1607,7 +1812,7 @@ void dsp_upsideDown()
  };
    
   void RadioStatemachine::onEnter(int16_t currentStatenb, int16_t oldStatenb) {
-    const uint32_t screenSections[NUM_RADIOSTATES] = {
+    uint32_t screenSections[NUM_RADIOSTATES] = {
      bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|bit(TFTSEC_BOT)|bit(TFTSEC_FAV_BOT),                 // RADIOSTATE_RUN ("normal")
      bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|bit(TFTSEC_VOL)|bit(TFTSEC_FAV_BOT),                 // RADIOSTATE_VOLUME (Volume display after change)
      bit(TFTSEC_FAV_BUT)|bit(TFTSEC_FAV)|bit(TFTSEC_BOT)|bit(TFTSEC_FAV_BOT),             // RADIOSTATE_PRESETS (Show preset Bank)
@@ -1624,8 +1829,10 @@ void dsp_upsideDown()
 
 char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Presets", "Show List", "Preset set", "List Done", "Menu", "Menu Done", "InitConfig", "ErrorVS1053"};
       dbgprint("RadioState: %d (%s)", currentStatenb, radiostateNames[currentStatenb]);
+      bool ignoreSpectrumAnalyzerSection = false;
       if ((STATE_INIT_NONE == oldStatenb) && (0 == odroidRadioConfig.start.preset)){
         String str = nvsgetstr ( "preset" );
+
         dbgprint("Start with last preset: %s\n", str.c_str());
 
         str = readStationfrompref(str.toInt());
@@ -1636,7 +1843,35 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
       currentStatenb = RADIOSTATE_RUN;
     if (RADIOSTATE_MENU != currentStatenb)
       _currentMenu = NULL;  
-    if (RADIOSTATE_INICONFIG == currentStatenb) {
+
+    if ((RADIOSTATE_RUN == currentStatenb) || (RADIOSTATE_VOLUME == currentStatenb) || (RADIOSTATE_MENU_DONE == currentStatenb) || (RADIOSTATE_LIST_SET == currentStatenb)) {
+//  These are the states where Spectrum Analyzer (if switched On) or else RadioText is visible
+      screenSections[currentStatenb-1] = bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|
+            (RADIOSTATE_VOLUME == currentStatenb?bit(TFTSEC_VOL):bit(TFTSEC_BOT))|bit(TFTSEC_FAV_BOT);          // "default" with RadioText
+      if (spectrumAnalyzer.isActive()) {
+        spectrumAnalyzer.reStart();
+        dbgprint("Try switch screen to spectrum analyzer");
+//        spectrumAnalyzer.activation(false);
+//        if (spectrumAnalyzer.activation(true)) 
+        {     // forces initalization of spectrum values and verifies if plugin is still working correctly
+          screenSections[currentStatenb - 1] = bit(TFTSEC_TOP)|bit(TFTSEC_SPECTRUM)|
+          (RADIOSTATE_VOLUME == currentStatenb?bit(TFTSEC_VOL):bit(TFTSEC_BOT))|bit(TFTSEC_FAV_BOT);     // RADIOSTATE_RUN ("normal") with Spectrum Analyzer     
+          dbgprint("Screen set to spectrum analyzer");
+          if (ignoreSpectrumAnalyzerSection = spectrumAnalyzer.showText())
+              screenSections[currentStatenb - 1] = screenSections[currentStatenb - 1] | bit(TFTSEC_TXT);
+/*          if (tftdata[TFTSEC_SPECTRUM].hidden)
+            if (spectrumAnalyzer.showText()) {
+              screenSections[currentStatenb - 1] = screenSections[currentStatenb - 1] | bit(TFTSEC_TXT);
+              tftdata[TFTSEC_SPECTRUM].color = tftdata[TFTSEC_TXT].color; 
+              tftset(TFTSEC_SPECTRUM, tftdata[TFTSEC_TXT].str);
+            } else {
+              tftset(TFTSEC_SPECTRUM, "  ** SPECTRUM ANALYZER **");
+              tftdata[TFTSEC_SPECTRUM].color = TFT_ORANGE; 
+            }
+*/
+        }
+      }
+    } else if (RADIOSTATE_INICONFIG == currentStatenb) {
       analyzeCmd("stop");
       dsp_erase();
       tftdata[TFTSEC_MEN_TOP].color = TFT_RED;
@@ -1644,8 +1879,7 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
       tftset(TFTSEC_LIST_CLR, "Connect desktop PC to SSID" NAME "/Pw " NAME "Open http://192.198.4.1/  to check your WiFi creden-tials.\n\n"
                         "Press (Default) to load   initial values.\n\n"
                         "Press (Save) and (Restart)when done!");
-    }
-    if (RADIOSTATE_INIVS == currentStatenb) {
+    } else if (RADIOSTATE_INIVS == currentStatenb) {
       dsp_erase();
       tftdata[TFTSEC_MEN_TOP].color = TFT_RED;
       tftset(TFTSEC_MEN_TOP, "DAC VS1053 failure");
@@ -1659,7 +1893,10 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
         if (screenSections[currentStatenb] & bm) {
           if (tftdata[i].hidden) {
             tftdata[i].hidden = false;
-            tftdata[i].update_req = true;
+            if ((i == TFTSEC_SPECTRUM) && ignoreSpectrumAnalyzerSection) // Special for Spectrum analyzer: hidden flag is evaluated to run analyzer.
+              tftdata[i].update_req = false;                             // however, if Radiotext is to displayed as well, the contents are ignored 
+            else                                                         // and radiotext section is used instead (kind of a hack here). 
+              tftdata[i].update_req = true;
           }
         } else
           tftdata[i].hidden = true;
@@ -1710,6 +1947,7 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
         setState(RADIOSTATE_RUN);
         break;
       case RADIOSTATE_VOLUME:
+//        spectrumAnalyzer.run();
         if (VOLUME_SHOWTIME < getStateTime())
           setState(RADIOSTATE_RUN);
         break;
@@ -1728,6 +1966,7 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
             setState(RADIOSTATE_RUN);
         break;  
       case RADIOSTATE_RUN:
+//        spectrumAnalyzer.run();
         break;
       case RADIOSTATE_INICONFIG:
         // Force stop in irregular (non-playing) mode.
@@ -1779,3 +2018,349 @@ const char startup_htmlArr[] PROGMEM = R"=====(
 
 size_t startup_htmlSize = sizeof(startup_htmlArr);
 const char *startup_html = startup_htmlArr;
+
+// VS1053 Spectrum Analyzer
+
+size_t spectrumAnalyzerPluginSize = 1000;
+extern const uint16_t spectrumAnalyzerPlugin[1000];
+
+void SpectrumAnalyzer::load() {
+  vs1053player->loadUserCode((const uint16_t *)&spectrumAnalyzerPlugin, spectrumAnalyzerPluginSize); 
+  _valid = true;
+  memset(_spectrum, 0, sizeof(_spectrum));
+  if (readBands())
+    dbgprint("Spectrum analyzer plugin installed successfully");
+  else
+    dbgprint("Failure installing spectrum analyzer plugin");    
+}
+
+bool SpectrumAnalyzer::activation(bool on) {
+  if (_valid)
+    if (on != _active) {
+      _active = on;
+      if (on) {
+        memset(_spectrum, 0, sizeof(_spectrum));
+        readBands();
+        _lastRun = 0;
+      }
+    }
+  return _valid && _active;
+}
+
+void SpectrumAnalyzer::run() {
+//static uint32_t lastRun = 0;
+//  if (isActive()) {
+//    uint32_t timeNow = millis();
+    if (!_lastRun || (millis() - _lastRun >= 0)) {
+      _lastRun = (_lastRun > 0)?_lastRun -8:millis();
+      if (_drawn == _bands) {
+        static uint8_t idx = 0;
+        readBands();
+//        if (0 == (idx++ & 0x1f))
+//        dbgprint("Spectrum read: %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
+//          _spectrum[0][0],_spectrum[1][0],_spectrum[2][0],_spectrum[3][0],_spectrum[4][0],_spectrum[5][0],_spectrum[6][0],_spectrum[7][0],_spectrum[8][0],
+//          _spectrum[9][0],_spectrum[10][0],_spectrum[11][0],_spectrum[12][0],_spectrum[13][0]);
+      }
+      uint8_t toDraw = esp_random();
+      bool refresh = 0 == (toDraw & 0x3f);
+      toDraw = toDraw % _bands;
+      while (_spectrum[toDraw][3])
+        toDraw = (toDraw + 1) % _bands;
+      _spectrum[toDraw][3] = 1;
+//      toDraw = _drawn;
+      uint8_t x = 12 + 10 * toDraw;
+      uint8_t y = 18 + (31 - _spectrum[toDraw][0]) * 2;  
+      uint8_t yOld = 18 + (31 - _spectrum[toDraw][1]) * 2;
+      uint8_t w = 6;
+
+      if ((y != yOld) || (_spectrum[toDraw][2])) { 
+        if (_spectrum[toDraw][2]) {
+//          claimSPI("spectrum");
+          //dsp_fillRect(x, _spectrum[toDraw][2],w ,1, TFT_BLACK);
+          tft->fillRect(2*x,2*_spectrum[toDraw][2],2*w ,1, TFT_BLACK);
+//          releaseSPI();
+          if (y > _spectrum[toDraw][2]) {
+            if (++_spectrum[toDraw][2] > 78)
+              _spectrum[toDraw][2] = 0;
+          } else
+            _spectrum[toDraw][2] = y - 2;
+        } else if (y < 80)
+          _spectrum[toDraw][2] = y - 2;
+        if (y > yOld) {      // was higher before
+//          claimSPI("spectrum");
+          dsp_fillRect(x, yOld, w, y - yOld, TFT_BLACK);
+//          releaseSPI();
+        } else if (y < yOld) { 
+//         if (refresh)
+          yOld = 80;
+//         claimSPI("spectrum");
+         dsp_fillRect(x, y, w, yOld - y, BLUE);
+         for(int i = 156;i >= 2 * y;i = i - 4)
+              tft->fillRect ( 2*x, i, 2*w, 1, TFT_BLACK);
+//         releaseSPI();
+        }
+        if (_spectrum[toDraw][2]) {
+//          claimSPI("spectrum");
+//          dsp_fillRect(x, _spectrum[toDraw][2],w,1, TFT_WHITE);
+          tft->fillRect(2*x,2*_spectrum[toDraw][2],2*w ,1, TFT_WHITE);
+//          releaseSPI();
+        }
+      }
+      _spectrum[toDraw][1] = _spectrum[toDraw][0];
+      _drawn++;
+    }
+//  }
+}
+
+void SpectrumAnalyzer::run1() {
+//static uint32_t lastRun = 0;
+//  if (isActive()) {
+//    uint32_t timeNow = millis();
+//    const uint8_t _speedMap[5] = {0, 25, 50, 100, 250};
+//    uint8_t _showSpeed = 3;
+
+    if (!_lastRun || (millis() - _lastRun >= _speedMap[_showSpeed])) {
+      _lastRun = millis();
+      readBands();
+      //hack
+      if (_showText)
+        tftdata[TFTSEC_TXT].hidden = false;
+    for(uint8_t toDraw = 0;toDraw < 14;toDraw++) {
+      uint8_t w = _barWidth;
+      uint8_t x = 10 + (5 - w/2) + 10 * toDraw;
+      uint8_t y = 18 + (31 - _spectrum[toDraw][0]) * 2;  
+      uint8_t yOld = 18 + (31 - _spectrum[toDraw][1]) * 2;
+
+      
+      if ((y != yOld) || (_spectrum[toDraw][2])) { 
+        if (_spectrum[toDraw][2]) {
+//          if (_showText)
+            tft->fillRect(20 + 20 * toDraw, 2*_spectrum[toDraw][2]-1,20 ,2, TFT_BLACK);
+//          else
+//            tft->fillRect(2*x,2*_spectrum[toDraw][2],2*(w?w:1) ,1, TFT_BLACK);
+          if (!_showPeaks)
+            _spectrum[toDraw][2] = 0;
+          else if (y > _spectrum[toDraw][2]) {
+            if (++_spectrum[toDraw][2] > 78)
+              _spectrum[toDraw][2] = 0;
+          } else
+            _spectrum[toDraw][2] = y - 2;
+        } else if ((y < 80) && _showPeaks)
+          _spectrum[toDraw][2] = y - 2;
+        if (y > yOld) {      // was higher before
+          if (_showText)
+            dsp_fillRect(10 + 10 * toDraw, yOld, 10, y - yOld, TFT_BLACK);          
+          else
+            dsp_fillRect(x, yOld, w, y - yOld, TFT_BLACK);
+        } /*else if (y < yOld)*/ { 
+          yOld = 80;
+          uint16_t col = BLUE;
+//          col = 8 * (uint16_t)_spectrum[toDraw][0];
+         if (_showDynamic) {
+            if (_spectrum[toDraw][0] < 16)
+              col = col - (16 -  _spectrum[toDraw][0])  - (16 -  _spectrum[toDraw][0])/4 - (16 -  _spectrum[toDraw][0])/8;
+            else
+              col = col + 0x20 * (uint16_t)((_spectrum[toDraw][0]) & 0xf);
+            col = (_spectrum[toDraw][0] > 15?0x1f + 0x40 * (_spectrum[toDraw][0] >> 3):(2 * (_spectrum[toDraw][0] & 0xc) + 7));
+         }
+         dsp_fillRect(x, y, w, yOld - y, col);
+         if (_showSegments) {
+            uint16_t ws, xs, col = getColor(_showSegmentColor);
+            if ((_showSegments == -1) || (_showSegments == w)) {
+              ws = w;xs = x;
+            } else {
+              ws = _showSegments;
+              xs = 10 + (5 - ws/2) + 10 * toDraw;
+            }
+            for(int i = 156;i >= 2 * y;i = i - 4)
+              tft->fillRect ( 2*xs, i, 2*ws, 1, col);
+         }
+        }
+        if (_spectrum[toDraw][2] && _peakWidth) {
+            if ((_peakWidth != -1) && (_peakWidth != w)) {
+              w = _peakWidth;
+              x = 10 + (5 - w/2) + 10 * toDraw;
+            }
+          tft->fillRect(2*x,2*_spectrum[toDraw][2],2*w ,1, getColor(_showPeaks));
+        }
+      }
+      _spectrum[toDraw][1] = _spectrum[toDraw][0];
+    }
+    }
+}
+
+uint16_t SpectrumAnalyzer::getColor(int16_t code) {
+  uint16_t colorTable[] = {0, 0xffff, 0x7bef, 0xf800, 0x7e0, 0x1f, 0x7ff, 0xffe0, 0x780f, 0x7be0, 0xf81f};
+  if ((code >= 0) && (code <= 10))
+    return colorTable[code];
+  else
+    return 0;
+}
+
+
+void runSpectrumAnalyzer() {
+  if (!tftdata[TFTSEC_SPECTRUM].hidden)             // this is only true, if spectrum analyzer should be displayed
+    if (!(spectrumAnalyzer.showText()?tftdata[TFTSEC_TXT].update_req:tftdata[TFTSEC_SPECTRUM].update_req)){      
+      // and this only after the display area has been cleared (and thus deleted the previous overlaying content)
+      claimSPI("spectrum");
+      spectrumAnalyzer.run1();
+      releaseSPI();
+  }
+}
+
+bool SpectrumAnalyzer::readBands() {
+uint8_t bands;
+     _drawn = 0;
+//    claimSPI("spectrum");
+//  if (_valid) {
+        vs1053player->write_register(SCI_WRAMADDR, _base+2);
+        bands = vs1053player->read_register(SCI_WRAM);
+//        _valid = _bands == 14;
+        if (bands == _bands) {
+//          vs1053player->write_register(SCI_WRAMADDR, _base+1);
+//          vs1053player->write_register(SCI_WRAM, 0xffff);
+          vs1053player->write_register(SCI_WRAMADDR, _base+4);
+          for (uint8_t i = 0; i < _bands; i++) {
+            _spectrum[i][0] = vs1053player->read_register(SCI_WRAM) & 0x1f;
+            _spectrum[i][3] = 0;
+          }
+        } else {
+          dbgprint("Spectrum analyzer read failed! Bands: %d", bands);
+          for (uint8_t i = 0; i < _bands; i++) {
+            if (_spectrum[i][0])  
+              _spectrum[i][0]--;  
+            _spectrum[i][3] = 0;
+          }
+        }
+//     releaseSPI();
+  return bands == _bands;
+}
+
+
+const uint16_t spectrumAnalyzerPlugin[1000] = { /* Compressed plugin */
+  0x0007, 0x0001, 0x8d00, 0x0006, 0x0004, 0x2803, 0x5b40, 0x0000, /*    0 */
+  0x0024, 0x0007, 0x0001, 0x8d02, 0x0006, 0x00d6, 0x3e12, 0xb817, /*    8 */
+  0x3e12, 0x3815, 0x3e05, 0xb814, 0x3615, 0x0024, 0x0000, 0x800a, /*   10 */
+  0x3e10, 0x3801, 0x0006, 0x0800, 0x3e10, 0xb803, 0x0000, 0x0303, /*   18 */
+  0x3e11, 0x3805, 0x3e11, 0xb807, 0x3e14, 0x3812, 0xb884, 0x130c, /*   20 */
+  0x3410, 0x4024, 0x4112, 0x10d0, 0x4010, 0x008c, 0x4010, 0x0024, /*   28 */
+  0xf400, 0x4012, 0x3000, 0x3840, 0x3009, 0x3801, 0x0000, 0x0041, /*   30 */
+  0xfe02, 0x0024, 0x2903, 0xb480, 0x48b2, 0x0024, 0x36f3, 0x0844, /*   38 */
+  0x6306, 0x8845, 0xae3a, 0x8840, 0xbf8e, 0x8b41, 0xac32, 0xa846, /*   40 */
+  0xffc8, 0xabc7, 0x3e01, 0x7800, 0xf400, 0x4480, 0x6090, 0x0024, /*   48 */
+  0x6090, 0x0024, 0xf400, 0x4015, 0x3009, 0x3446, 0x3009, 0x37c7, /*   50 */
+  0x3009, 0x1800, 0x3009, 0x3844, 0x48b3, 0xe1e0, 0x4882, 0x4040, /*   58 */
+  0xfeca, 0x0024, 0x5ac2, 0x0024, 0x5a52, 0x0024, 0x4cc2, 0x0024, /*   60 */
+  0x48ba, 0x4040, 0x4eea, 0x4801, 0x4eca, 0x9800, 0xff80, 0x1bc1, /*   68 */
+  0xf1eb, 0xe3e2, 0xf1ea, 0x184c, 0x4c8b, 0xe5e4, 0x48be, 0x9804, /*   70 */
+  0x488e, 0x41c6, 0xfe82, 0x0024, 0x5a8e, 0x0024, 0x525e, 0x1b85, /*   78 */
+  0x4ffe, 0x0024, 0x48b6, 0x41c6, 0x4dd6, 0x48c7, 0x4df6, 0x0024, /*   80 */
+  0xf1d6, 0x0024, 0xf1d6, 0x0024, 0x4eda, 0x0024, 0x0000, 0x0fc3, /*   88 */
+  0x2903, 0xb480, 0x4e82, 0x0024, 0x4084, 0x130c, 0x0006, 0x0500, /*   90 */
+  0x3440, 0x4024, 0x4010, 0x0024, 0xf400, 0x4012, 0x3200, 0x4024, /*   98 */
+  0xb132, 0x0024, 0x4214, 0x0024, 0xf224, 0x0024, 0x6230, 0x0024, /*   a0 */
+  0x0001, 0x0001, 0x2803, 0x54c9, 0x0000, 0x0024, 0xf400, 0x40c2, /*   a8 */
+  0x3200, 0x0024, 0xff82, 0x0024, 0x48b2, 0x0024, 0xb130, 0x0024, /*   b0 */
+  0x6202, 0x0024, 0x003f, 0xf001, 0x2803, 0x57d1, 0x0000, 0x1046, /*   b8 */
+  0xfe64, 0x0024, 0x48be, 0x0024, 0x2803, 0x58c0, 0x3a01, 0x8024, /*   c0 */
+  0x3200, 0x0024, 0xb010, 0x0024, 0xc020, 0x0024, 0x3a00, 0x0024, /*   c8 */
+  0x36f4, 0x1812, 0x36f1, 0x9807, 0x36f1, 0x1805, 0x36f0, 0x9803, /*   d0 */
+  0x36f0, 0x1801, 0x3405, 0x9014, 0x36f3, 0x0024, 0x36f2, 0x1815, /*   d8 */
+  0x2000, 0x0000, 0x36f2, 0x9817, 0x0007, 0x0001, 0x8d6d, 0x0006, /*   e0 */
+  0x01f6, 0x3613, 0x0024, 0x3e12, 0xb817, 0x3e12, 0x3815, 0x3e05, /*   e8 */
+  0xb814, 0x3645, 0x0024, 0x0000, 0x800a, 0x3e10, 0xb803, 0x3e11, /*   f0 */
+  0x3805, 0x3e11, 0xb811, 0x3e14, 0xb813, 0x3e13, 0xf80e, 0x4182, /*   f8 */
+  0x384d, 0x0006, 0x0912, 0x2803, 0x6105, 0x0006, 0x0451, 0x0006, /*  100 */
+  0xc352, 0x3100, 0x8803, 0x6238, 0x1bcc, 0x0000, 0x0024, 0x2803, /*  108 */
+  0x7705, 0x4194, 0x0024, 0x0006, 0x0912, 0x3613, 0x0024, 0x0006, /*  110 */
+  0x0411, 0x0000, 0x0302, 0x3009, 0x3850, 0x0006, 0x0410, 0x3009, /*  118 */
+  0x3840, 0x0000, 0x1100, 0x2914, 0xbec0, 0xb882, 0xb801, 0x0000, /*  120 */
+  0x1000, 0x0006, 0x0810, 0x2915, 0x7ac0, 0xb882, 0x0024, 0x3900, /*  128 */
+  0x9bc1, 0x0006, 0xc351, 0x3009, 0x1bc0, 0x3009, 0x1bd0, 0x3009, /*  130 */
+  0x0404, 0x0006, 0x0451, 0x2803, 0x66c0, 0x3901, 0x0024, 0x4448, /*  138 */
+  0x0402, 0x4294, 0x0024, 0x6498, 0x2402, 0x001f, 0x4002, 0x6424, /*  140 */
+  0x0024, 0x0006, 0x0411, 0x2803, 0x6611, 0x0000, 0x03ce, 0x2403, /*  148 */
+  0x764e, 0x0000, 0x0013, 0x0006, 0x1a04, 0x0006, 0x0451, 0x3100, /*  150 */
+  0x8024, 0xf224, 0x44c5, 0x4458, 0x0024, 0xf400, 0x4115, 0x3500, /*  158 */
+  0xc024, 0x623c, 0x0024, 0x0000, 0x0024, 0x2803, 0x7691, 0x0000, /*  160 */
+  0x0024, 0x4384, 0x184c, 0x3100, 0x3800, 0x2915, 0x7dc0, 0xf200, /*  168 */
+  0x0024, 0x003f, 0xfec3, 0x4084, 0x4491, 0x3113, 0x1bc0, 0xa234, /*  170 */
+  0x0024, 0x0000, 0x2003, 0x6236, 0x2402, 0x0000, 0x1003, 0x2803, /*  178 */
+  0x6fc8, 0x0000, 0x0024, 0x003f, 0xf803, 0x3100, 0x8024, 0xb236, /*  180 */
+  0x0024, 0x2803, 0x75c0, 0x3900, 0xc024, 0x6236, 0x0024, 0x0000, /*  188 */
+  0x0803, 0x2803, 0x7208, 0x0000, 0x0024, 0x003f, 0xfe03, 0x3100, /*  190 */
+  0x8024, 0xb236, 0x0024, 0x2803, 0x75c0, 0x3900, 0xc024, 0x6236, /*  198 */
+  0x0024, 0x0000, 0x0403, 0x2803, 0x7448, 0x0000, 0x0024, 0x003f, /*  1a0 */
+  0xff03, 0x3100, 0x8024, 0xb236, 0x0024, 0x2803, 0x75c0, 0x3900, /*  1a8 */
+  0xc024, 0x6236, 0x0402, 0x003f, 0xff83, 0x2803, 0x75c8, 0x0000, /*  1b0 */
+  0x0024, 0xb236, 0x0024, 0x3900, 0xc024, 0xb884, 0x07cc, 0x3900, /*  1b8 */
+  0x88cc, 0x3313, 0x0024, 0x0006, 0x0491, 0x4194, 0x2413, 0x0006, /*  1c0 */
+  0x04d1, 0x2803, 0x9755, 0x0006, 0x0902, 0x3423, 0x0024, 0x3c10, /*  1c8 */
+  0x8024, 0x3100, 0xc024, 0x4304, 0x0024, 0x39f0, 0x8024, 0x3100, /*  1d0 */
+  0x8024, 0x3cf0, 0x8024, 0x0006, 0x0902, 0xb884, 0x33c2, 0x3c20, /*  1d8 */
+  0x8024, 0x34d0, 0xc024, 0x6238, 0x0024, 0x0000, 0x0024, 0x2803, /*  1e0 */
+  0x8dd8, 0x4396, 0x0024, 0x2403, 0x8d83, 0x0000, 0x0024, 0x3423, /*  1e8 */
+  0x0024, 0x34e4, 0x4024, 0x3123, 0x0024, 0x3100, 0xc024, 0x4304, /*  1f0 */
+  0x0024, 0x4284, 0x2402, 0x0000, 0x2003, 0x2803, 0x8b89, 0x0000, /*  1f8 */
+  0x0024, 0x3423, 0x184c, 0x34f4, 0x4024, 0x3004, 0x844c, 0x3100, /*  200 */
+  0xb850, 0x6236, 0x0024, 0x0006, 0x0802, 0x2803, 0x81c8, 0x4088, /*  208 */
+  0x1043, 0x4336, 0x1390, 0x4234, 0x0024, 0x4234, 0x0024, 0xf400, /*  210 */
+  0x4091, 0x2903, 0xa480, 0x0003, 0x8308, 0x4336, 0x1390, 0x4234, /*  218 */
+  0x0024, 0x4234, 0x0024, 0x2903, 0x9a00, 0xf400, 0x4091, 0x0004, /*  220 */
+  0x0003, 0x3423, 0x1bd0, 0x3404, 0x4024, 0x3123, 0x0024, 0x3100, /*  228 */
+  0x8024, 0x6236, 0x0024, 0x0000, 0x4003, 0x2803, 0x85c8, 0x0000, /*  230 */
+  0x0024, 0xb884, 0x878c, 0x3900, 0x8024, 0x34e4, 0x4024, 0x3123, /*  238 */
+  0x0024, 0x31e0, 0x8024, 0x6236, 0x0402, 0x0000, 0x0024, 0x2803, /*  240 */
+  0x8b88, 0x4284, 0x0024, 0x0000, 0x0024, 0x2803, 0x8b95, 0x0000, /*  248 */
+  0x0024, 0x3413, 0x184c, 0x3410, 0x8024, 0x3e10, 0x8024, 0x34e0, /*  250 */
+  0xc024, 0x2903, 0x4080, 0x3e10, 0xc024, 0xf400, 0x40d1, 0x003f, /*  258 */
+  0xff44, 0x36e3, 0x048c, 0x3100, 0x8024, 0xfe44, 0x0024, 0x48ba, /*  260 */
+  0x0024, 0x3901, 0x0024, 0x0000, 0x00c3, 0x3423, 0x0024, 0xf400, /*  268 */
+  0x4511, 0x34e0, 0x8024, 0x4234, 0x0024, 0x39f0, 0x8024, 0x3100, /*  270 */
+  0x8024, 0x6294, 0x0024, 0x3900, 0x8024, 0x0006, 0x0411, 0x6894, /*  278 */
+  0x04c3, 0xa234, 0x0403, 0x6238, 0x0024, 0x0000, 0x0024, 0x2803, /*  280 */
+  0x9741, 0x0000, 0x0024, 0xb884, 0x90cc, 0x39f0, 0x8024, 0x3100, /*  288 */
+  0x8024, 0xb884, 0x3382, 0x3c20, 0x8024, 0x34d0, 0xc024, 0x6238, /*  290 */
+  0x0024, 0x0006, 0x0512, 0x2803, 0x9758, 0x4396, 0x0024, 0x2403, /*  298 */
+  0x9703, 0x0000, 0x0024, 0x0003, 0xf002, 0x3201, 0x0024, 0xb424, /*  2a0 */
+  0x0024, 0x0028, 0x0002, 0x2803, 0x9605, 0x6246, 0x0024, 0x0004, /*  2a8 */
+  0x0003, 0x2803, 0x95c1, 0x4434, 0x0024, 0x0000, 0x1003, 0x6434, /*  2b0 */
+  0x0024, 0x2803, 0x9600, 0x3a00, 0x8024, 0x3a00, 0x8024, 0x3213, /*  2b8 */
+  0x104c, 0xf400, 0x4511, 0x34f0, 0x8024, 0x6294, 0x0024, 0x3900, /*  2c0 */
+  0x8024, 0x36f3, 0x4024, 0x36f3, 0xd80e, 0x36f4, 0x9813, 0x36f1, /*  2c8 */
+  0x9811, 0x36f1, 0x1805, 0x36f0, 0x9803, 0x3405, 0x9014, 0x36f3, /*  2d0 */
+  0x0024, 0x36f2, 0x1815, 0x2000, 0x0000, 0x36f2, 0x9817, 0x0007, /*  2d8 */
+  0x0001, 0x1868, 0x0006, 0x0010, 0x0032, 0x004f, 0x007e, 0x00c8, /*  2e0 */
+  0x013d, 0x01f8, 0x0320, 0x04f6, 0x07e0, 0x0c80, 0x13d8, 0x1f7f, /*  2e8 */
+  0x3200, 0x4f5f, 0x61a8, 0x0000, 0x0007, 0x0001, 0x8e68, 0x0006, /*  2f0 */
+  0x0054, 0x3e12, 0xb814, 0x0000, 0x800a, 0x3e10, 0x3801, 0x3e10, /*  2f8 */
+  0xb803, 0x3e11, 0x7806, 0x3e11, 0xf813, 0x3e13, 0xf80e, 0x3e13, /*  300 */
+  0x4024, 0x3e04, 0x7810, 0x449a, 0x0040, 0x0001, 0x0003, 0x2803, /*  308 */
+  0xa344, 0x4036, 0x03c1, 0x0003, 0xffc2, 0xb326, 0x0024, 0x0018, /*  310 */
+  0x0042, 0x4326, 0x4495, 0x4024, 0x40d2, 0x0000, 0x0180, 0xa100, /*  318 */
+  0x4090, 0x0010, 0x0fc2, 0x4204, 0x0024, 0xbc82, 0x4091, 0x459a, /*  320 */
+  0x0024, 0x0000, 0x0054, 0x2803, 0xa244, 0xbd86, 0x4093, 0x2403, /*  328 */
+  0xa205, 0xfe01, 0x5e0c, 0x5c43, 0x5f2d, 0x5e46, 0x020c, 0x5c56, /*  330 */
+  0x8a0c, 0x5e53, 0x5e0c, 0x5c43, 0x5f2d, 0x5e46, 0x020c, 0x5c56, /*  338 */
+  0x8a0c, 0x5e52, 0x0024, 0x4cb2, 0x4405, 0x0018, 0x0044, 0x654a, /*  340 */
+  0x0024, 0x2803, 0xb040, 0x36f4, 0x5810, 0x0007, 0x0001, 0x8e92, /*  348 */
+  0x0006, 0x0080, 0x3e12, 0xb814, 0x0000, 0x800a, 0x3e10, 0x3801, /*  350 */
+  0x3e10, 0xb803, 0x3e11, 0x7806, 0x3e11, 0xf813, 0x3e13, 0xf80e, /*  358 */
+  0x3e13, 0x4024, 0x3e04, 0x7810, 0x449a, 0x0040, 0x0000, 0x0803, /*  360 */
+  0x2803, 0xaf04, 0x30f0, 0x4024, 0x0fff, 0xfec2, 0xa020, 0x0024, /*  368 */
+  0x0fff, 0xff02, 0xa122, 0x0024, 0x4036, 0x0024, 0x0000, 0x1fc2, /*  370 */
+  0xb326, 0x0024, 0x0010, 0x4002, 0x4326, 0x4495, 0x4024, 0x40d2, /*  378 */
+  0x0000, 0x0180, 0xa100, 0x4090, 0x0010, 0x0042, 0x4204, 0x0024, /*  380 */
+  0xbc82, 0x4091, 0x459a, 0x0024, 0x0000, 0x0054, 0x2803, 0xae04, /*  388 */
+  0xbd86, 0x4093, 0x2403, 0xadc5, 0xfe01, 0x5e0c, 0x5c43, 0x5f2d, /*  390 */
+  0x5e46, 0x0024, 0x5c56, 0x0024, 0x5e53, 0x5e0c, 0x5c43, 0x5f2d, /*  398 */
+  0x5e46, 0x0024, 0x5c56, 0x0024, 0x5e52, 0x0024, 0x4cb2, 0x4405, /*  3a0 */
+  0x0010, 0x4004, 0x654a, 0x9810, 0x0000, 0x0144, 0xa54a, 0x1bd1, /*  3a8 */
+  0x0006, 0x0413, 0x3301, 0xc444, 0x687e, 0x2005, 0xad76, 0x8445, /*  3b0 */
+  0x4ed6, 0x8784, 0x36f3, 0x64c2, 0xac72, 0x8785, 0x4ec2, 0xa443, /*  3b8 */
+  0x3009, 0x2440, 0x3009, 0x2741, 0x36f3, 0xd80e, 0x36f1, 0xd813, /*  3c0 */
+  0x36f1, 0x5806, 0x36f0, 0x9803, 0x36f0, 0x1801, 0x2000, 0x0000, /*  3c8 */
+  0x36f2, 0x9814, 0x0007, 0x0001, 0x8ed2, 0x0006, 0x000e, 0x4c82, /*  3d0 */
+  0x0024, 0x0000, 0x0024, 0x2000, 0x0005, 0xf5c2, 0x0024, 0x0000, /*  3d8 */
+  0x0980, 0x2000, 0x0000, 0x6010, 0x0024, 0x000a, 0x0001, 0x0d00
+};

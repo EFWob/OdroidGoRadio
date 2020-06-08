@@ -2,12 +2,15 @@
 ## Caveat Emptor
 This is beta SW. 
 
-For testing, the SW runs without a VS1053 module connected. All buttons are fully functional, but there will be no noticable audio 
-output...
+For testing, the SW runs in demo mode without a VS1053 module connected. All buttons are fully functional, but there will 
+be no noticable audio output...
 
 ## Basic Idea
 This is a project to port the ESP32-Radio by Edzelf (see https://github.com/Edzelf/ESP32-Radio) to the Odroid-Go to use the 
 display and the buttons to control the radio.
+
+It also features a very cool 14 channel spectrum analyzer (see Menu3 below). The spectrum analyzer will not work if VS1053 is
+not connected (i. e. if radio is in demo mode).
 
 It will compile in Arduino-IDE. You have to make sure to set the board to "ODROID ESP32" as conditional compile is used 
 to apply some changes to the base software.
@@ -31,7 +34,6 @@ The connection to the VS1053 is done through the Odroid-header pins as follows (
 * Arduino-IDE v1.8 or later (tested v1.8.5, required at least v1.8.0)
 * ESP32-Core (tested v1.0.4)
 * Other libraries needed:
-    * odroid_go.h (Hardkernel default Odroid-Go library, v1.0.0)
 	* time.h (Michael Margolis, maintainer Paul Stoffregen, v1.5.0)
 	* PubSubClient.h (by Nick O'Leary, v2.7.0)
 * Other versions might work too, its just untested. Please let me know if you encounter any difficulties.
@@ -177,7 +179,35 @@ is shown in addition to the station name.
 
 (You can not enter new stations here. That needs to be done through the configuration webpage as usual.=
 
-### Menu 3: Equalizer (not yet implemented)
+### Menu 3: Equalizer/Spectrum analyzer
+
+Here you change the equalizer settings (not yet implemented) and configure the spectrum analyzer.
+
+#### Equalizer
+* Not yet implemented
+
+#### Spectrum Analyzer
+* Show Spectrum Analyzer: if switched to yes, a 14 channel spectrum analyzer will be shown in the radiotext section.
+* Analyzer Speed: defines the update speed of the analyzer from "Disco" (very fast) to "Slug" (about 2 frames per second).
+* Dynamic Brightness: if set to "yes", the brightness of channel bars is altered by its value (the higher the brighter 
+a bar will appear).
+* Show Peaks: show additional peak indicator on top of the channel bar.
+* Bar width: the width of channel bars (from 0 to 10)
+* Peak width: the width of the peak indicator (from 0 to 10 or set to "same" to follow the width of the channel bar.
+* Segment Divider width: divides the channel bar in equal segments. Width can be 0 (means no divider) up to 10 or "same" to
+follow the channel bar width.
+* Segm.Divider color: color of segment divider.
+* Show Radiotext: Show radiotext in addition to spectrum analyzer. Often the radiotext is just two lines or less on the 
+display and usally will not interfere with the spectrum analyzer that stays below normally. Howerver with high peaks 
+or lengthy text, the text might get erased by the analyzer. Text will only be refreshed if send newly by the current
+radiostation.
+
+Just play around with the settings to adjust to your liking. Note that any change in the menu will be applied directly. 
+If you find the settings to your liking, remember to press (A) to store the settings for next Power On.
+With few stations the equalizer will not work (reproducible). I have not yet found the reason for that issue.
+
+ToDo: Parameter for channel bar color (now blue only).
+
 
 ### Menu 4: Sleep timer
 * Sleep time: from now on in this many minutes the volume will dim to minimum value (and then to 0)
