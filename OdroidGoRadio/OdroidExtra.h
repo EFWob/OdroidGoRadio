@@ -2,7 +2,7 @@
 #define __ODROIDEXTRA__H_
 //#include <odroid_go.h>
 #include "src/libraries/Display.h"
-#define ODROIDRADIO_VERSION "202006081733"
+#define ODROIDRADIO_VERSION "202006081900"
 // Data to display.  There are TFTSECS sections
 #define TFTSEC_TOP        0             // Index for Top line, normal play
 #define TFTSEC_TXT        1             // Index for Radiotext, normal play
