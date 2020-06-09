@@ -192,9 +192,10 @@ Here you change the equalizer settings (not yet implemented) and configure the s
 * Dynamic Brightness: if set to "yes", the brightness of channel bars is altered by its value (the higher the brighter 
 a bar will appear).
 * Show Peaks: show additional peak indicator on top of the channel bar.
-* Bar width: the width of channel bars (from 0 to 10)
-* Peak width: the width of the peak indicator (from 0 to 10 or set to "same" to follow the width of the channel bar.
-* Segment Divider width: divides the channel bar in equal segments. Width can be 0 (means no divider) up to 10 or "same" to
+* Bar width: the width of channel bars (from 0 to 20). Bars are always shown equidistant (20 points away from each other). 
+Smaller bars will have spacing in between. 
+* Peak width: the width of the peak indicator (from 0 to 20 or set to "same" to follow the width of the channel bar.
+* Segment Divider width: divides the channel bar in equal segments. Width can be 0 (means no divider) up to 20 or "same" to
 follow the channel bar width.
 * Segm.Divider color: color of segment divider.
 * Show Radiotext: Show radiotext in addition to spectrum analyzer. Often the radiotext is just two lines or less on the 
