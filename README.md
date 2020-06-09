@@ -92,7 +92,7 @@ The radio screen is mainly similar to the default ESP32-Radio-Screen.
 * Bottom line shows current "bank" for favorite stations.
 
 ### Changing Volume
-Press (and hold) <Left> or <Right> to decrease/increase the volume. The current volume setting is shown on button of screen.
+Press/hold (Left) or (Right) to decrease/increase the volume. The current volume setting is shown on button of screen.
 The range is limited by a configurable Minimum and Maximum.
 
 ### Changing Station

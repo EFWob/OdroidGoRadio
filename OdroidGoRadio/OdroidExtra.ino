@@ -23,13 +23,15 @@ class SpectrumAnalyzer {
      void reStart() {_lastRun = 0;};
      void showSpeed(uint8_t speed) {_showSpeed = speed;};
      void showDynamic(bool dynamic) {_showDynamic = dynamic;};
+     void showBarColor(int16_t color) {_showColor = color;dbgprint("Set Color %d", _showColor);};
      void showPeaks(int16_t peaks) { _showPeaks = peaks;};
      void showSegmentWidth(uint16_t segmentWidth) { _showSegments = segmentWidth;};
      void showWidth(int16_t width) {_barWidth = width;};
      void showPeakWidth(int16_t width) {_peakWidth = width;};
-     void showSegmentColor(int16_t col) {_showSegmentColor = col;};
+     void showSegmentColor(int16_t col) {_showSegmentColor = col;dbgprint("Set SegmentColor %d", _showSegmentColor);};
      void showText(bool showText) {_showText = showText;};
      bool showText() {return _showText;};
+     int16_t getBarColor() {return getColor(_showColor);}; 
    protected:
     const uint8_t _speedMap[6] = {0, 25, 50, 100, 200, 500};
     uint8_t _showSpeed = 3;
@@ -45,6 +47,7 @@ class SpectrumAnalyzer {
     int16_t _showPeaks = 1;
     int16_t _showSegments = -1;
     int16_t _showSegmentColor = 0;
+    int16_t _showColor = 5;
     bool _active = false;  
     bool _showText = false;
     uint8_t _drawn = 0;
@@ -140,7 +143,8 @@ struct {
     int16_t spectrumAnalyzerWidth = 3;
     int16_t spectrumAnalyzerText = 0;
     int16_t spectrumAnalyzerPeakWidth = -1;
-    int16_t spectrumAnalyzerSegmentColor = 0;  
+    int16_t spectrumAnalyzerSegmentColor = 0;
+    int16_t spectrumAnalyzerBarColor = 5;  
     int16_t eq0 = 0;
     int16_t eq1 = 0;
     int16_t eq2 = 0;
@@ -460,7 +464,7 @@ class RadioMenuEntrySpectrumColor : public RadioMenuEntry {
 class RadioMenuEntryWidth : public RadioMenuEntry {
   public:
     RadioMenuEntryWidth(char* txt, int16_t *reference):
-          RadioMenuEntry(txt, reference, -1, 10) {
+          RadioMenuEntry(txt, reference, -1, 20) {
               };
 
     virtual char *getValueString() {
@@ -1145,9 +1149,10 @@ class RadioMenu3: public RadioMenu {
       addEntry(new RadioMenuEntry("--- Spectrum Analyzer ----"));
       addEntry(_showSpectrum = new RadioMenuEntryBool("Show Spectrum Analyzer", &odroidRadioConfig.equalizer.showSpectrumAnalyzer));
       addEntry(_showSpeed = new RadioMenuEntrySpectrumSpeed("Analyzer Speed", &odroidRadioConfig.equalizer.spectrumAnalyzerSpeed));
+      addEntry(_showColor = new RadioMenuEntrySpectrumColor("Bar Color", &odroidRadioConfig.equalizer.spectrumAnalyzerBarColor)); 
       addEntry(_showDynamic = new RadioMenuEntryBool("Dynamic Brightness", &odroidRadioConfig.equalizer.spectrumAnalyzerDynamic));
       addEntry(_showPeaks = new RadioMenuEntrySpectrumColor("Show Peaks", &odroidRadioConfig.equalizer.spectrumAnalyzerPeaks, true));
-      addEntry(_barWidth = new RadioMenuEntry("Bar width", &odroidRadioConfig.equalizer.spectrumAnalyzerWidth,0,10));
+      addEntry(_barWidth = new RadioMenuEntry("Bar width", &odroidRadioConfig.equalizer.spectrumAnalyzerWidth,0,20));
       addEntry(_peakWidth = new RadioMenuEntryWidth("Peak width",  &odroidRadioConfig.equalizer.spectrumAnalyzerPeakWidth));
       addEntry(_showSegments = new RadioMenuEntryWidth("Segm.Divider width", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentWidth));
       addEntry(_segmentColor = new RadioMenuEntrySpectrumColor("Segm.Divider color", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentColor));
@@ -1155,17 +1160,21 @@ class RadioMenu3: public RadioMenu {
     };
 
     void menuButton(uint8_t button, uint16_t repeats) {
-      bool showSpectrum = _showSpectrum->value();
+      int16_t showSpectrum = _showSpectrum->value();
       int16_t spectrumSpeed = _showSpeed->value();
-      bool showDynamic = _showDynamic->value();
-      bool showPeaks = _showPeaks->value();
+      int16_t showDynamic = _showDynamic->value();
+      int16_t showPeaks = _showPeaks->value();
       int16_t showSegments = _showSegments->value();
       int16_t barWidth = _barWidth->value();
-      bool showText = _showText->value();
+      int16_t showText = _showText->value();
       int16_t peakWidth = _peakWidth->value();
       int16_t segmentColor = _segmentColor->value();
+      int16_t barColor = _showColor->value();
       RadioMenu::menuButton(button, repeats);
-      if (showSpectrum != _showSpectrum->value())
+      dbgprint("MenuButton done. Value BarColor: %d (was: %d)", _showColor->value(), barColor);
+      if (barColor != _showColor->value())
+        spectrumAnalyzer.showBarColor(_showColor->value());
+      else if (showSpectrum != _showSpectrum->value())
         spectrumAnalyzer.activation(!showSpectrum);
       else if (spectrumSpeed != _showSpeed->value())
         spectrumAnalyzer.showSpeed(_showSpeed->value());
@@ -1181,13 +1190,15 @@ class RadioMenu3: public RadioMenu {
         spectrumAnalyzer.showText(_showText->value());
       else if (peakWidth != _peakWidth->value())
         spectrumAnalyzer.showPeakWidth(_peakWidth->value());
-      else if (segmentColor = _segmentColor->value())
+      else if (segmentColor != _segmentColor->value())
         spectrumAnalyzer.showSegmentColor(_segmentColor->value());
+
     };
     protected:
       RadioMenuEntryBool* _showSpectrum;
       RadioMenuEntryBool* _showDynamic;
       RadioMenuEntrySpectrumColor* _showPeaks;
+      RadioMenuEntrySpectrumColor* _showColor;
       RadioMenuEntrySpectrumColor* _segmentColor;
       RadioMenuEntry* _barWidth;
       RadioMenuEntryWidth* _showSegments;
@@ -1703,6 +1714,7 @@ int16_t iniVolume;
     spectrumAnalyzer.showWidth(odroidRadioConfig.equalizer.spectrumAnalyzerWidth);
     spectrumAnalyzer.showText(odroidRadioConfig.equalizer.spectrumAnalyzerText);
     spectrumAnalyzer.showPeakWidth(odroidRadioConfig.equalizer.spectrumAnalyzerPeakWidth);
+    spectrumAnalyzer.showBarColor(odroidRadioConfig.equalizer.spectrumAnalyzerBarColor);
   }
   step++;
   return step < 2;
@@ -1830,6 +1842,7 @@ void dsp_upsideDown()
 char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Presets", "Show List", "Preset set", "List Done", "Menu", "Menu Done", "InitConfig", "ErrorVS1053"};
       dbgprint("RadioState: %d (%s)", currentStatenb, radiostateNames[currentStatenb]);
       bool ignoreSpectrumAnalyzerSection = false;
+      tftdata[TFTSEC_TXT].color = CYAN;            
       if ((STATE_INIT_NONE == oldStatenb) && (0 == odroidRadioConfig.start.preset)){
         String str = nvsgetstr ( "preset" );
 
@@ -1857,8 +1870,13 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
           screenSections[currentStatenb - 1] = bit(TFTSEC_TOP)|bit(TFTSEC_SPECTRUM)|
           (RADIOSTATE_VOLUME == currentStatenb?bit(TFTSEC_VOL):bit(TFTSEC_BOT))|bit(TFTSEC_FAV_BOT);     // RADIOSTATE_RUN ("normal") with Spectrum Analyzer     
           dbgprint("Screen set to spectrum analyzer");
-          if (ignoreSpectrumAnalyzerSection = spectrumAnalyzer.showText())
+          if (ignoreSpectrumAnalyzerSection = spectrumAnalyzer.showText()) {
+              tftdata[TFTSEC_TXT].color = spectrumAnalyzer.getBarColor();            
               screenSections[currentStatenb - 1] = screenSections[currentStatenb - 1] | bit(TFTSEC_TXT);
+         }
+          else
+              tftdata[TFTSEC_SPECTRUM].color = spectrumAnalyzer.getBarColor();
+
 /*          if (tftdata[TFTSEC_SPECTRUM].hidden)
             if (spectrumAnalyzer.showText()) {
               screenSections[currentStatenb - 1] = screenSections[currentStatenb - 1] | bit(TFTSEC_TXT);
@@ -2047,6 +2065,8 @@ bool SpectrumAnalyzer::activation(bool on) {
   return _valid && _active;
 }
 
+
+#ifdef OLD
 void SpectrumAnalyzer::run() {
 //static uint32_t lastRun = 0;
 //  if (isActive()) {
@@ -2112,7 +2132,9 @@ void SpectrumAnalyzer::run() {
 //  }
 }
 
-void SpectrumAnalyzer::run1() {
+#endif
+
+void SpectrumAnalyzer::run() {
 //static uint32_t lastRun = 0;
 //  if (isActive()) {
 //    uint32_t timeNow = millis();
@@ -2189,8 +2211,80 @@ void SpectrumAnalyzer::run1() {
     }
 }
 
+void SpectrumAnalyzer::run1() {
+//static uint32_t lastRun = 0;
+//  if (isActive()) {
+//    uint32_t timeNow = millis();
+//    const uint8_t _speedMap[5] = {0, 25, 50, 100, 250};
+//    uint8_t _showSpeed = 3;
+
+    if (!_lastRun || (millis() - _lastRun >= _speedMap[_showSpeed])) {
+      _lastRun = millis();
+      readBands();
+      //hack
+      if (_showText)
+        tftdata[TFTSEC_TXT].hidden = false;
+    for(uint8_t toDraw = 0;toDraw < 14;toDraw++) {
+      uint16_t w = _barWidth;
+      uint16_t x = 20 + (10 - w/2) + 20 * toDraw;
+      uint16_t y = 36 + (31 - _spectrum[toDraw][0]) * 4;  
+      uint16_t yOld = 36 + (31 - _spectrum[toDraw][1]) * 4;
+
+      
+      if ((y != yOld) || (_spectrum[toDraw][2])) { 
+        if (_spectrum[toDraw][2]) {
+            tft->fillRect(20 + 20 * toDraw, _spectrum[toDraw][2]-1,20 ,2, TFT_BLACK);
+          if (!_showPeaks)
+            _spectrum[toDraw][2] = 0;
+          else if (y > _spectrum[toDraw][2]) {
+            if (++_spectrum[toDraw][2] > 156)
+              _spectrum[toDraw][2] = 0;
+          } else
+            _spectrum[toDraw][2] = y - 2;
+        } else if ((y < 160) && _showPeaks)
+          _spectrum[toDraw][2] = y - 2;
+        if (y > yOld) {      // was higher before
+//          if (_showText)
+            tft->fillRect(20 + 20 * toDraw, yOld, 20, y - yOld, TFT_BLACK);          
+//          else
+//            dsp_fillRect(x, yOld, w, y - yOld, TFT_BLACK);
+        } /*else if (y < yOld)*/ { 
+          yOld = 160;
+          uint16_t col = getColor(_showColor);
+//          col = 8 * (uint16_t)_spectrum[toDraw][0];
+         if (_showDynamic) {
+            uint8_t val;
+            if ((val = _spectrum[toDraw][0]) < 16)
+              col = (map(val, 0, 15, col & 8, col & 0x1f) & 0x1f) + (map(val, 0, 15, col & 0x100, col & 0x7e0) & 0x7e0) + (map(val, 0, 15, col & 0x4000, col & 0xf800) & 0xf800);
+         }
+         tft->fillRect(x, y, w, yOld - y, col);
+         if (_showSegments) {
+            uint16_t ws, xs, col = getColor(_showSegmentColor);
+            if ((_showSegments == -1) || (_showSegments == w)) {
+              ws = w;xs = x;
+            } else {
+              ws = _showSegments;
+              xs = 20 + (10 - ws/2) + 20 * toDraw;
+            }
+            for(int i = 156;i > y;i = i - 4)
+              tft->fillRect ( xs, i, ws, 1, col);
+         }
+        }
+        if (_spectrum[toDraw][2] && _peakWidth) {
+            if ((_peakWidth != -1) && (_peakWidth != w)) {
+              w = _peakWidth;
+              x = 20 + (10 - w/2) + 20 * toDraw;
+            }
+          tft->fillRect(x,_spectrum[toDraw][2],w ,1, getColor(_showPeaks));
+        }
+      }
+      _spectrum[toDraw][1] = _spectrum[toDraw][0];
+    }
+    }
+}
+
 uint16_t SpectrumAnalyzer::getColor(int16_t code) {
-  uint16_t colorTable[] = {0, 0xffff, 0x7bef, 0xf800, 0x7e0, 0x1f, 0x7ff, 0xffe0, 0x780f, 0x7be0, 0xf81f};
+  uint16_t colorTable[] = {0, 0xffff, 0x8bef, 0xf800, 0x7e0, 0x1f, 0x7ff, 0xffe0, 0x880f, 0x8be0, 0xf81f};
   if ((code >= 0) && (code <= 10))
     return colorTable[code];
   else
