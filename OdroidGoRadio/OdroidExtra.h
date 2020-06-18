@@ -2,7 +2,7 @@
 #define __ODROIDEXTRA__H_
 //#include <odroid_go.h>
 #include "src/libraries/Display.h"
-#define ODROIDRADIO_VERSION "202006082349"
+#define ODROIDRADIO_VERSION "202006182336"
 // Data to display.  There are TFTSECS sections
 #define TFTSEC_TOP        0             // Index for Top line, normal play
 #define TFTSEC_TXT        1             // Index for Radiotext, normal play
@@ -22,8 +22,10 @@
 #define TFTSEC_MEN_HLP2  16             // Help Text 2 Menu
 #define TFTSEC_MENU_VAL  10             // updated Menu Item Value
 #define TFTSEC_SPECTRUM  17             // Spectrum Analyzer
+#define TFTSEC_FAV_BUT2  18             // Favorite Channels select button display ("<1> <2>"... on top line below buttons in not Flipped Display) 
 
-#define TFTSECS 18
+
+#define TFTSECS 19
 ILI9341 *tft = NULL;
 scrseg_struct     tftdata[TFTSECS] =                        // Screen divided in 3 segments + 1 overlay
 {                                                           // One text line is 8 pixels
@@ -46,13 +48,16 @@ scrseg_struct     tftdata[TFTSECS] =                        // Screen divided in
   { false, WHITE,   2,  8, "MENU                      ", true ,0},                             // 1 top line MENU
   {false, WHITE, 86, 16, "<UP>   /  <DOWN> to select\n<LEFT> / <RIGHT> to change", true,0},
   {false, WHITE, 106, 8, "<A> to Save  <B> to Cancel", true,0},
-  {false, TFT_ORANGE, 16, 64, "  ** SPECTRUM ANALYZER **", true, 0}
+  {false, TFT_ORANGE, 16, 64, "  ** SPECTRUM ANALYZER **", true, 0},
+  { false, WHITE,   106,  8, "<1>    <2>       <3>   <4>", true,0 }                            // Preset Keys in Upside-Mode
+  
 } ;
 
 //VS1053_SPI = SPISettings ( 5000000, MSBFIRST, SPI_MODE0 ) ;
 
 // Various macro's to mimic the ST7735 version of display functions
-#define dsp_setRotation()       tft->setRotation ( 3 )             // Use landscape format (3 for upside down)
+//#define dsp_setRotation()       tft->setRotation ( 3 )             // Use landscape format (3 for upside down)
+void dsp_setRotation();
 #define dsp_print(a)            tft->print ( a )                   // Print a string 
 #define dsp_println(b)          tft->println ( b )                 // Print a string followed by newline
 

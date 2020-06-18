@@ -5,6 +5,14 @@
 //#include <odroid_go.h>
 #include "OdroidExtra.h"
 
+// VS1053 Plugins Spectrum Analyzer
+
+size_t spectrumAnalyzerPluginSize = 1000;
+extern const uint16_t spectrumAnalyzerPlugin[1000];
+
+
+
+
 extern char*       dbgprint( const char* format, ... ) ;
 extern bool time_req;
 extern String nvsgetstr ( const char* key );
@@ -31,7 +39,8 @@ class SpectrumAnalyzer {
      void showSegmentColor(int16_t col) {_showSegmentColor = col;dbgprint("Set SegmentColor %d", _showSegmentColor);};
      void showText(bool showText) {_showText = showText;};
      bool showText() {return _showText;};
-     int16_t getBarColor() {return getColor(_showColor);}; 
+     int16_t getBarColor() {return getColor(_showColor);};
+     void fastDrop(bool fast) {_fastDrop = fast;}; 
    protected:
     const uint8_t _speedMap[6] = {0, 25, 50, 100, 200, 500};
     uint8_t _showSpeed = 3;
@@ -43,6 +52,7 @@ class SpectrumAnalyzer {
     int16_t _barWidth = 3;
     int16_t _peakWidth = -1;
     bool _valid = false;
+    bool _fastDrop = true;
     bool _showDynamic = false;
     int16_t _showPeaks = 1;
     int16_t _showSegments = -1;
@@ -130,6 +140,7 @@ struct {
     int16_t ignoreSD = 1;
     int16_t keySpeed = 2;
     int16_t debug = 1;
+    int16_t flipped = 1;
   } misc;
   struct {
     int16_t preset = 1;
@@ -145,6 +156,7 @@ struct {
     int16_t spectrumAnalyzerPeakWidth = -1;
     int16_t spectrumAnalyzerSegmentColor = 0;
     int16_t spectrumAnalyzerBarColor = 5;  
+    int16_t spectrumAnalyzerFastDrop = 1;
     int16_t eq0 = 0;
     int16_t eq1 = 0;
     int16_t eq2 = 0;
@@ -890,6 +902,7 @@ class RadioMenu1: public RadioMenu {
       addEntry(new RadioMenuEntryKeySpeed);
       addEntry(new RadioMenuEntryBool("Ignore SD-Card", &odroidRadioConfig.misc.ignoreSD));
       addEntry(_debug = new RadioMenuEntryBool("Show Debug on Serial", &odroidRadioConfig.misc.debug));
+      addEntry(_flip = new RadioMenuEntryBool("Display Flipped", &odroidRadioConfig.misc.flipped));
       addEntry(new RadioMenuEntry((char *)(String("BTW: IP is ") + ipaddress).c_str()));
     };
     
@@ -907,9 +920,12 @@ class RadioMenu1: public RadioMenu {
    void menuButton(uint8_t button, uint16_t repeats) {
       int16_t vol;
       RadioMenuEntry *lastCurrentEntry = _currentEntry;
-      if (MENU_A == button)
+      if (MENU_A == button) {
+        if (_flip->value() != odroidRadioConfig.misc.flipped)
+          dsp_erase();
         if (DEBUG != _debug->value())
           analyzeCmd("debug", _debug->value()?"1":"0");
+        }
         if (odroidRadioConfig.misc.favBanks != _favBanks->value()) {
           char s[20];
           if (favoriteGroup >= (2 * _favBanks->value())) {
@@ -960,7 +976,7 @@ class RadioMenu1: public RadioMenu {
       int16_t _defaultVolume;
       RadioMenuEntryStartPreset *_initPreset;
       RadioMenuEntry *_startVol = NULL, *_minVol = NULL, *_maxVol = NULL, *_maxBri, *_minBri, *_favBanks, *_debug;
-      RadioMenuEntryBool *_lifeVol;
+      RadioMenuEntryBool *_lifeVol, *_flip;
 };
 
 class RadioMenu2: public RadioMenu {
@@ -1149,11 +1165,12 @@ class RadioMenu3: public RadioMenu {
       addEntry(new RadioMenuEntry("--- Spectrum Analyzer ----"));
       addEntry(_showSpectrum = new RadioMenuEntryBool("Show Spectrum Analyzer", &odroidRadioConfig.equalizer.showSpectrumAnalyzer));
       addEntry(_showSpeed = new RadioMenuEntrySpectrumSpeed("Analyzer Speed", &odroidRadioConfig.equalizer.spectrumAnalyzerSpeed));
+      addEntry(_barWidth = new RadioMenuEntry("Bar width", &odroidRadioConfig.equalizer.spectrumAnalyzerWidth,0,20));
       addEntry(_showColor = new RadioMenuEntrySpectrumColor("Bar Color", &odroidRadioConfig.equalizer.spectrumAnalyzerBarColor)); 
       addEntry(_showDynamic = new RadioMenuEntryBool("Dynamic Brightness", &odroidRadioConfig.equalizer.spectrumAnalyzerDynamic));
       addEntry(_showPeaks = new RadioMenuEntrySpectrumColor("Show Peaks", &odroidRadioConfig.equalizer.spectrumAnalyzerPeaks, true));
-      addEntry(_barWidth = new RadioMenuEntry("Bar width", &odroidRadioConfig.equalizer.spectrumAnalyzerWidth,0,20));
       addEntry(_peakWidth = new RadioMenuEntryWidth("Peak width",  &odroidRadioConfig.equalizer.spectrumAnalyzerPeakWidth));
+      addEntry(_fastDrop = new RadioMenuEntryBool("Peak drop fast", &odroidRadioConfig.equalizer.spectrumAnalyzerFastDrop));      
       addEntry(_showSegments = new RadioMenuEntryWidth("Segm.Divider width", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentWidth));
       addEntry(_segmentColor = new RadioMenuEntrySpectrumColor("Segm.Divider color", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentColor));
       addEntry(_showText = new RadioMenuEntryBool("Show Radiotext", &odroidRadioConfig.equalizer.spectrumAnalyzerText));
@@ -1170,6 +1187,7 @@ class RadioMenu3: public RadioMenu {
       int16_t peakWidth = _peakWidth->value();
       int16_t segmentColor = _segmentColor->value();
       int16_t barColor = _showColor->value();
+      int16_t fastDrop = _fastDrop->value();
       RadioMenu::menuButton(button, repeats);
       dbgprint("MenuButton done. Value BarColor: %d (was: %d)", _showColor->value(), barColor);
       if (barColor != _showColor->value())
@@ -1192,11 +1210,14 @@ class RadioMenu3: public RadioMenu {
         spectrumAnalyzer.showPeakWidth(_peakWidth->value());
       else if (segmentColor != _segmentColor->value())
         spectrumAnalyzer.showSegmentColor(_segmentColor->value());
+      else if (fastDrop != _fastDrop->value())
+        spectrumAnalyzer.fastDrop(_fastDrop->value());
 
     };
     protected:
       RadioMenuEntryBool* _showSpectrum;
       RadioMenuEntryBool* _showDynamic;
+      RadioMenuEntryBool* _fastDrop;
       RadioMenuEntrySpectrumColor* _showPeaks;
       RadioMenuEntrySpectrumColor* _showColor;
       RadioMenuEntrySpectrumColor* _segmentColor;
@@ -1383,6 +1404,8 @@ void handleBtnAB(uint8_t group, bool released = false) {
 
 void handleBtnMemory(int id) {
 int radioState = radioStatemachine.getState();
+    if (!odroidRadioConfig.misc.flipped)
+      id = 5 - id;
     if ((0 == id) || (RADIOSTATE_INIVS == radioState) || (RADIOSTATE_INICONFIG == radioState)) 
       return;     
     else if ((RADIOSTATE_MENU == radioState) && (id < 5)) {
@@ -1439,6 +1462,8 @@ static int channelX;
 int channelY;
   if (!direction)
     return channelX;
+  if (!odroidRadioConfig.misc.flipped)
+    direction = -direction;
   if (RADIOSTATE_MENU == radioState) {
     radioStatemachine.menuButton((1 == direction)?MENU_DN:MENU_UP, repeats);
   } else if ((RADIOSTATE_RUN == radioState) || (RADIOSTATE_LIST == radioState) || (RADIOSTATE_PRESETS == radioState) || (RADIOSTATE_PRESET_SET == radioState)
@@ -1501,6 +1526,8 @@ int16_t radioState = radioStatemachine.getState();
       }
     if ( 0 == dir)
       return;
+    if (!odroidRadioConfig.misc.flipped)
+      dir = -dir;
     if (RADIOSTATE_MENU == radioState) {
       radioStatemachine.menuButton((1 == dir)?MENU_RIGHT:MENU_LEFT, repeats);
     } 
@@ -1647,6 +1674,13 @@ void odroidSetup() {
     if (nvsgetOdroid())
       dbgprint("Odroid config data from nvs done!");
     dbgprint( "Odroid-Setup done" ) ;
+    dsp_setRotation();
+    
+/*    if (odroidRadioConfig.misc.flipped)
+      tft->setRotation(3);
+    else
+      tft->setRotation(1);
+*/
     if (LOW == digitalRead(32)) {
       dsp_erase();
       dsp_setRotation();
@@ -1715,9 +1749,10 @@ int16_t iniVolume;
     spectrumAnalyzer.showText(odroidRadioConfig.equalizer.spectrumAnalyzerText);
     spectrumAnalyzer.showPeakWidth(odroidRadioConfig.equalizer.spectrumAnalyzerPeakWidth);
     spectrumAnalyzer.showBarColor(odroidRadioConfig.equalizer.spectrumAnalyzerBarColor);
+    spectrumAnalyzer.fastDrop(odroidRadioConfig.equalizer.spectrumAnalyzerFastDrop);
   }
   step++;
-  return step < 2;
+  return step < 2;      // more to do?
 }
 
 void odroidLoop(void) {    
@@ -1787,6 +1822,8 @@ void dsp_upsideDown()
 
   void RadioStatemachine::startMenu(uint8_t idx) {
     int16_t radioState = getState();
+    if (!odroidRadioConfig.misc.flipped)
+      idx = 5 - idx;
     idx--;
     if ((idx > 3) || (RADIOSTATE_INICONFIG == radioState) || (RADIOSTATE_INIVS == radioState))  
       return;
@@ -1822,6 +1859,17 @@ void dsp_upsideDown()
     } else
       resetStateTime();
  };
+
+  void dsp_setRotation() {
+      if (odroidRadioConfig.misc.flipped) {
+        tft->setRotation(3);
+        dbgprint("DISPLAY Rotation3");
+      } else {
+        tft->setRotation(1);
+        dbgprint("DISPLAY Rotation1");
+
+      }    
+  }
    
   void RadioStatemachine::onEnter(int16_t currentStatenb, int16_t oldStatenb) {
     uint32_t screenSections[NUM_RADIOSTATES] = {
@@ -1842,7 +1890,10 @@ void dsp_upsideDown()
 char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Presets", "Show List", "Preset set", "List Done", "Menu", "Menu Done", "InitConfig", "ErrorVS1053"};
       dbgprint("RadioState: %d (%s)", currentStatenb, radiostateNames[currentStatenb]);
       bool ignoreSpectrumAnalyzerSection = false;
-      tftdata[TFTSEC_TXT].color = CYAN;            
+      tftdata[TFTSEC_TXT].color = CYAN;
+      
+      dsp_setRotation();
+
       if ((STATE_INIT_NONE == oldStatenb) && (0 == odroidRadioConfig.start.preset)){
         String str = nvsgetstr ( "preset" );
 
@@ -1920,7 +1971,17 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
           tftdata[i].hidden = true;
         bm = bm * 2;
       }
-    }       
+    }
+    //Special for "not-flipped-Display"
+    if (false == tftdata[TFTSEC_FAV_BUT].hidden)
+      if (!odroidRadioConfig.misc.flipped) {
+        tftdata[TFTSEC_TOP].hidden = false;
+        tftdata[TFTSEC_FAV_BOT].hidden = true;
+        tftdata[TFTSEC_TOP].update_req = true;
+        tftdata[TFTSEC_FAV_BUT].hidden = true;
+        tftdata[TFTSEC_FAV_BUT2].hidden = false;
+        tftdata[TFTSEC_FAV_BUT2].update_req = true;
+      }
   };
 
   
@@ -2037,10 +2098,6 @@ const char startup_htmlArr[] PROGMEM = R"=====(
 size_t startup_htmlSize = sizeof(startup_htmlArr);
 const char *startup_html = startup_htmlArr;
 
-// VS1053 Spectrum Analyzer
-
-size_t spectrumAnalyzerPluginSize = 1000;
-extern const uint16_t spectrumAnalyzerPlugin[1000];
 
 void SpectrumAnalyzer::load() {
   vs1053player->loadUserCode((const uint16_t *)&spectrumAnalyzerPlugin, spectrumAnalyzerPluginSize); 
@@ -2237,7 +2294,8 @@ void SpectrumAnalyzer::run1() {
           if (!_showPeaks)
             _spectrum[toDraw][2] = 0;
           else if (y > _spectrum[toDraw][2]) {
-            if (++_spectrum[toDraw][2] > 156)
+            _spectrum[toDraw][2] = _spectrum[toDraw][2] + (_fastDrop?2:1);
+            if (_spectrum[toDraw][2] > 156)
               _spectrum[toDraw][2] = 0;
           } else
             _spectrum[toDraw][2] = y - 2;
@@ -2458,3 +2516,4 @@ const uint16_t spectrumAnalyzerPlugin[1000] = { /* Compressed plugin */
   0x0024, 0x0000, 0x0024, 0x2000, 0x0005, 0xf5c2, 0x0024, 0x0000, /*  3d8 */
   0x0980, 0x2000, 0x0000, 0x6010, 0x0024, 0x000a, 0x0001, 0x0d00
 };
+
