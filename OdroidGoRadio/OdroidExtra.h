@@ -2,6 +2,8 @@
 #define __ODROIDEXTRA__H_
 //#include <odroid_go.h>
 #include "src/libraries/Display.h"
+#include "src/libraries/ESPNowWrapper.h"
+#include "src/libraries/BasicStatemachineOdroid.h"
 #define ODROIDRADIO_VERSION "202006182336"
 // Data to display.  There are TFTSECS sections
 #define TFTSEC_TOP        0             // Index for Top line, normal play
@@ -77,4 +79,14 @@ bool dsp_begin();
 void dsp_upsideDown();
 void odroidLoop();
 void runSpectrumAnalyzer();
+
+class ESPNowRadioServer: public ESPNowServiceHandlerClass, public BasicStatemachine  {
+    public:
+      ESPNowRadioServer(const uint8_t* mac);
+      virtual void flushRX(const uint8_t *mac, const uint8_t packetId, const uint8_t *data, const uint8_t dataLen);
+      void runState(int16_t stateNb);
+} ;
+
+extern ESPNowRadioServer espNowRadioServer;
+
 #endif

@@ -203,7 +203,12 @@ ButtonHandler btnVol(new VirtualGPIO(0, false, INPUT_PULLUP), NULL, 700, 50000);
 ButtonHandler btnMenu(new VirtualGPIO(13, false, INPUT_PULLUP), NULL, 700, 50000);
 ButtonHandler btnA(new VirtualGPIO(32, false, INPUT_PULLUP), NULL, 50, 1000);
 ButtonHandler btnB(new VirtualGPIO(33, false, INPUT_PULLUP), NULL, 50, 1000);
-bool presetPresent[100];
+//bool 
+uint8_t presetPresent[100];    // 
+uint8_t numPresets = 0;
+uint8_t presetMap[100];
+//uint8_t presetInverseMap[100];
+
 
 String readStationfrompref(int fav) {
   String str = readhostfrompref(fav);
@@ -1669,7 +1674,11 @@ void odroidSetup() {
     btnB.onLongPressed([](uint16_t) {handleBtnAB(1);}).onLongReleased([]() {handleBtnAB(1, true);});
     for(int i = 0;i < 100;i++) {
       sprintf(key, "preset_%02d", i);
-      presetPresent[i] = nvssearch(key);
+      if (nvssearch(key)) {
+        presetMap[numPresets++] = i;
+        presetPresent[i] = numPresets;
+      } else
+          presetPresent[i] = 0;
     }  
     if (nvsgetOdroid())
       dbgprint("Odroid config data from nvs done!");
@@ -2516,4 +2525,155 @@ const uint16_t spectrumAnalyzerPlugin[1000] = { /* Compressed plugin */
   0x0024, 0x0000, 0x0024, 0x2000, 0x0005, 0xf5c2, 0x0024, 0x0000, /*  3d8 */
   0x0980, 0x2000, 0x0000, 0x6010, 0x0024, 0x000a, 0x0001, 0x0d00
 };
+
+
+uint8_t getPresetList(uint8_t* buf, uint16_t size1, uint8_t idx) {
+bool done = idx >= numPresets;
+  *buf = 0;
+  uint16_t size = size1 - 1;//remaining buffer size
+  char *s = (char *)(buf + 1); 
+  while (!done) {
+    String station = readStationfrompref(presetMap[idx]);
+    if (size >= station.length() + 1) {
+      Serial.println(station.c_str());
+      strcpy(s, station.c_str());
+      s = s + station.length() + 1;
+      size = size - station.length() - 1;
+      (*buf)++;
+      done = (++idx >= numPresets);
+    }
+    else {
+      done = true;
+    }
+  }
+  if (idx >= numPresets)
+    *buf += 128;
+  return size1 - size;
+}
+
+uint8_t getStatus(uint8_t* buf, uint16_t size) {
+  /* 
+   *  buf[0] = volume
+   *  buf[1] = volume.min
+   *  buf[2] = volume.max
+   *  buf[3] = current preset (in "compressed" list)
+   *  buf[4] = number of presets
+   *  buf[5..n] = radiotext (0 terminated) [if buf is big enough...]
+   *  buf[n..m] = station name (0 terminated) [if buf is big enough...]
+   */
+uint16_t size1;
+  if (size < 5)       // need at least 5 bytes
+    return 0;
+  buf[0] = ini_block.reqvol;
+  buf[1] = odroidRadioConfig.volume.min;
+  buf[2] = odroidRadioConfig.volume.max;
+  buf[3] = presetPresent[ini_block.newpreset] - 1;
+  buf[4] = numPresets;
+  size1 = 5;
+  if (size > size1) {
+    const char *s = tftdata[TFTSEC_TXT].str.c_str();
+    if (size > size1 + strlen(s)) {
+      memcpy(buf + 5, s, strlen(s) + 1);
+      size1 = size1 + strlen(s);
+    }
+    else {
+      buf[5] = 0;
+    }
+    size1++; 
+  }
+  return size1;
+}
+
+void recvCbFunction(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
+  char s[255];
+  memcpy(s+1, data, data_len);
+  s[data_len +1] = 0;
+  Serial.printf("Got something from {%02X, %02X, %02X, %02X, %02X, %02X}, len=%d, content=%s\r\n",
+    mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5],
+       data_len, s+1);
+
+}
+
+
+
+
+ESPNowRadioServer::ESPNowRadioServer(const uint8_t* mac): ESPNowServiceHandlerClass(mac, 0x6161) {
+         espnowWrapper.addServiceHandler(this);
+         if (isBroadcastMac())
+            StatemachineLooper.add(this);
+      };
+  
+void ESPNowRadioServer::flushRX(const uint8_t *mac, const uint8_t packetId, const uint8_t *data, const uint8_t dataLen) {
+ESPNowRadioServer *clientHandler = this;
+  if (this->isBroadcastMac()) {
+    clientHandler = new ESPNowRadioServer(mac);
+//    clientHandler->dataCopy(this);
+    Serial.printf("New radio client: {%02X, %02X, %02X, %02X, %02X, %02X}\r\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]); 
+    Serial.printf("Ignore radio from broadcast. packetId = %d, Len = %d, Content = %s\r\n", 
+                  packetId, dataLen, data); 
+  } 
+  Serial.printf("Handle radio client: {%02X, %02X, %02X, %02X, %02X, %02X}, packetId = %d, Len = %d, Content = %s\r\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                  packetId, dataLen, data);
+  char tst[241];
+  int len = 0;
+  if (packetId < 100) {
+    len = getPresetList((uint8_t *)tst, 240, packetId);
+  } else if (packetId == 100) {
+    len = getStatus((uint8_t *)tst, 240);
+    Serial.printf("Prepared status reply, len=%d\r\n", len);
+  } else if (packetId == 200) {
+    if ((dataLen == 1) && (ini_block.newpreset != presetMap[data[0]]) && (data[0] < numPresets)) {
+      char s[10];
+      sprintf(s, "%d", presetMap[data[0]]);
+      analyzeCmd("preset", s);
+      String str = readStationfrompref(presetMap[data[0]]);
+      tftset(TFTSEC_TXT, str);
+  //    tftset(TFTSEC_BOT, str);
+
+    }
+  } else if (packetId == 201) {
+    if ((dataLen == 1) && (ini_block.reqvol != data[0]) && (data[0] >=  odroidRadioConfig.volume.min) && (data[0] <= odroidRadioConfig.volume.max)) {
+      char s[10];
+      sprintf(s, "%d", data[0]);
+      analyzeCmd("volume", s);
+    }
+  }
+  if (len > 0)
+    clientHandler->setTX((const uint8_t *)tst, len, packetId, 3);
+} ;
+
+void ESPNowRadioServer::runState(int16_t stateNb) {
+#define STATE_RADIOSERVER_RUN 1
+/*  if (stateNb != STATE_INIT_NONE) {
+    if (WL_CONNECTED == WiFi.status())
+      espnowWrapper.loop();
+    else {
+      espnowWrapper.end();
+      setState(STATE_INIT_NONE);
+      return;
+    }
+  }*/
+  switch(stateNb) {  
+    case STATE_INIT_NONE:
+      if (WL_CONNECTED == WiFi.status())
+        if (ESPNOWWRAPPER_OK == espnowWrapper.begin(WiFi.channel())) {
+          dbgprint("Radio listening for ESPNow-Clients on channel %d", espnowWrapper.channel());
+          espnowWrapper.setRecvCb(recvCbFunction);
+          setState(STATE_RADIOSERVER_RUN);
+        }
+      break;
+    case STATE_RADIOSERVER_RUN:
+      if (WL_CONNECTED == WiFi.status())
+        espnowWrapper.loop();
+      else {
+        dbgprint("WiFi lost, ESPNow-Server stopped");
+        espnowWrapper.end();
+        setState(STATE_INIT_NONE);
+      }
+      break;
+  }
+}
+
+
+ESPNowRadioServer espNowRadioServer(broadcastMac);
 
