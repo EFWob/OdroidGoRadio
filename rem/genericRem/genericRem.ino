@@ -1,12 +1,10 @@
-#include "src/libraries/ESPNowWrapper.h"
-#define LILYGO_WATCH_LVGL
-#define LILYGO_WATCH_2020_V1             //To use T-Watch2020, please uncomment this line
-#include <LilyGoWatch.h>
+#include "ESPNowWrapper.h"
+#if defined(ESP32)
 #include <WiFi.h>
-
-bool statusUpdated = false;
-bool pwrKeyFlag = false;
-void performanceLoop(void);
+#endif
+#if defined(ESP8266)
+#include <ESP8266WiFi.h>
+#endif
 
 class ESPNowRadioClient: public ESPNowServiceHandlerClass  {
     public:
@@ -29,6 +27,98 @@ class ESPNowRadioClient: public ESPNowServiceHandlerClass  {
       char *_radioText = NULL;
       
 }  espNowRadioClient(broadcastMac);
+
+uint32_t volumeChangeTime = 0;
+uint8_t volumeValue = 0;
+uint32_t presetChangeTime = 0;
+uint8_t presetValue = 0;
+uint32_t statusChangeTime = 0;
+uint32_t statusFastChangeTime = 0;
+uint32_t statusUpdateBlockTime = 0;
+
+
+#if defined(ARDUINO_T_Watch)
+#define LILYGO_WATCH_LVGL
+#define LILYGO_WATCH_2020_V1             //To use T-Watch2020, please uncomment this line
+#include <LilyGoWatch.h>
+bool pwrKeyFlag = false;
+
+TTGOClass *ttgo;
+lv_obj_t * volumeSlider, *radioText, *stationList; 
+
+
+
+static void event_handler_volume(lv_obj_t * sldr, lv_event_t event)
+{
+   if(event == LV_EVENT_VALUE_CHANGED) {
+      printf("Value: %d\n", lv_slider_get_value(sldr));
+      volumeChangeTime = millis() + 50;
+      statusUpdateBlockTime = volumeChangeTime + 2000;
+      volumeValue = lv_slider_get_value(sldr);
+      }
+}
+
+static void event_handler_preset(lv_obj_t * sldr, lv_event_t event)
+{
+   if(event == LV_EVENT_VALUE_CHANGED) {
+      printf("Value: %d\n", lv_slider_get_value(sldr));
+      presetChangeTime = millis() + 50;
+      presetValue = lv_dropdown_get_selected(sldr);
+      }
+}
+
+
+static void event_handler_text(lv_obj_t * sldr, lv_event_t event)
+{
+   if(event == LV_EVENT_RELEASED) {
+      statusChangeTime = millis();
+      }
+}
+
+
+void ttgoSetup() {
+    ttgo->tft->printf("DONE!\r\n");
+
+    pinMode(AXP202_INT, INPUT_PULLUP);
+    attachInterrupt(AXP202_INT, [] {
+        pwrKeyFlag = true;
+    }, FALLING);
+    ttgo->power->enableIRQ(AXP202_PEK_SHORTPRESS_IRQ,
+                     true);
+    ttgo->power->clearIRQ();
+
+  
+    ttgo->lvgl_begin();
+    volumeSlider = lv_slider_create(lv_scr_act(), NULL);
+    lv_obj_set_size(volumeSlider, 210, 10);
+    lv_obj_set_pos(volumeSlider, 15, 212);
+    lv_slider_set_range(volumeSlider, espNowRadioClient._minVolume , espNowRadioClient._maxVolume);
+    lv_slider_set_value(volumeSlider, espNowRadioClient._curVolume, LV_ANIM_OFF);
+//    lv_obj_align(slider, NULL, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_event_cb(volumeSlider, event_handler_volume);
+
+    radioText = lv_textarea_create(lv_scr_act(), NULL);
+    lv_obj_set_size(radioText, 230, 150);
+    lv_obj_set_pos(radioText, 5, 45);
+    lv_textarea_set_text(radioText, espNowRadioClient._radioText);
+    lv_textarea_set_cursor_hidden(radioText, true);
+    /*Set an initial text*/
+    lv_obj_set_event_cb(radioText, event_handler_text);
+
+    stationList = lv_dropdown_create(lv_scr_act(), NULL);
+    lv_obj_set_size(stationList, 230, 35);
+    lv_obj_set_pos(stationList, 5, 5);
+    for (int i = 0;i < espNowRadioClient._numPresets;i++)
+      lv_dropdown_add_option(stationList, espNowRadioClient._presets[i], i);
+    lv_dropdown_set_selected(stationList, espNowRadioClient._curPreset);
+    lv_obj_set_event_cb(stationList, event_handler_preset);
+          
+}
+#endif
+
+
+bool statusUpdated = false;
+void performanceLoop(void);
 
 
 void recvCbFunction(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
@@ -137,6 +227,7 @@ void ESPNowRadioClient::requestStatus() {
 void ESPNowRadioClient::flushRX(const uint8_t *mac, const uint8_t packetId, const uint8_t *data, const uint8_t dataLen) {
   if (isBroadcastMac()) {
     setMac(mac);
+    espnowWrapper.addPeer(mac);
 //    clientHandler = new ESPNowRadioServer(mac);
 //    clientHandler->dataCopy(this);
     _channel = espnowWrapper.channel();
@@ -189,93 +280,33 @@ bool espnowStart(uint8_t chan) {
 }
 
 
-TTGOClass *ttgo;
-lv_obj_t * volumeSlider, *radioText, *stationList; 
-uint32_t volumeChangeTime = 0;
-uint8_t volumeValue = 0;
-uint32_t presetChangeTime = 0;
-uint8_t presetValue = 0;
-uint32_t statusChangeTime = 0;
-uint32_t statusFastChangeTime = 0;
-uint32_t statusUpdateBlockTime = 0;
-
-
-static void event_handler_volume(lv_obj_t * sldr, lv_event_t event)
-{
-   if(event == LV_EVENT_VALUE_CHANGED) {
-      printf("Value: %d\n", lv_slider_get_value(sldr));
-      volumeChangeTime = millis() + 50;
-      statusUpdateBlockTime = volumeChangeTime + 2000;
-      volumeValue = lv_slider_get_value(sldr);
-      }
-}
-
-static void event_handler_preset(lv_obj_t * sldr, lv_event_t event)
-{
-   if(event == LV_EVENT_VALUE_CHANGED) {
-      printf("Value: %d\n", lv_slider_get_value(sldr));
-      presetChangeTime = millis() + 50;
-      presetValue = lv_dropdown_get_selected(sldr);
-      }
-}
-
-
-static void event_handler_text(lv_obj_t * sldr, lv_event_t event)
-{
-   if(event == LV_EVENT_RELEASED) {
-      statusChangeTime = millis();
-      }
-}
-
-
-void lvglSetup() {
-    ttgo->lvgl_begin();
-    volumeSlider = lv_slider_create(lv_scr_act(), NULL);
-    lv_obj_set_size(volumeSlider, 210, 10);
-    lv_obj_set_pos(volumeSlider, 15, 212);
-    lv_slider_set_range(volumeSlider, espNowRadioClient._minVolume , espNowRadioClient._maxVolume);
-    lv_slider_set_value(volumeSlider, espNowRadioClient._curVolume, LV_ANIM_OFF);
-//    lv_obj_align(slider, NULL, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_event_cb(volumeSlider, event_handler_volume);
-
-    radioText = lv_textarea_create(lv_scr_act(), NULL);
-    lv_obj_set_size(radioText, 230, 150);
-    lv_obj_set_pos(radioText, 5, 45);
-    lv_textarea_set_text(radioText, espNowRadioClient._radioText);
-    lv_textarea_set_cursor_hidden(radioText, true);
-    /*Set an initial text*/
-    lv_obj_set_event_cb(radioText, event_handler_text);
-
-    stationList = lv_dropdown_create(lv_scr_act(), NULL);
-    lv_obj_set_size(stationList, 230, 35);
-    lv_obj_set_pos(stationList, 5, 5);
-    for (int i = 0;i < espNowRadioClient._numPresets;i++)
-      lv_dropdown_add_option(stationList, espNowRadioClient._presets[i], i);
-    lv_dropdown_set_selected(stationList, espNowRadioClient._curPreset);
-    lv_obj_set_event_cb(stationList, event_handler_preset);
-          
-}
 
 void setup() {
   int chanDelay = 5;
   Serial.begin(115200);
+#if defined(ARDUINO_T_Watch)
     ttgo = TTGOClass::getWatch();
     //Initialize TWatch
     ttgo->begin();
+    ttgo->tft->setTextSize(2);
     ttgo->openBL();
+#endif
   toSend[0] = 0;
-  ttgo->tft->setTextSize(2);
   uint8_t chan = 9;
   while (espNowRadioClient.isBroadcastMac()) {
     chan = chan + 1;
     if (14 == chan) {
       chan = 1;
       chanDelay++;
+#if defined(ARDUINO_T_Watch)
       ttgo->tft->fillScreen(TFT_BLACK);
       ttgo->tft->setCursor(0,0);
+#endif
     }
     Serial.printf("Scanning Channel %d\r\n", chan);
-    ttgo->tft->printf("Scanning Channel %d\r\n", chan);   
+#if defined(ARDUINO_T_Watch)
+    ttgo->tft->printf("Scanning Channel %d\r\n", chan);
+#endif   
     if (espnowStart(chan)) {
       int i = 0;
       while((i < chanDelay) && espNowRadioClient.isBroadcastMac()) {
@@ -292,11 +323,14 @@ void setup() {
         espnowWrapper.end();
     }
   }
+#if defined(ARDUINO_T_Watch)
   ttgo->tft->fillScreen(TFT_BLACK);
   ttgo->tft->setCursor(0,0);
   ttgo->tft->printf("Success! Channel: %d\r\nLoading defaults...\r\n", chan);
+#endif
+     espnowWrapper.end();
     delay(500);
-//    espnowStart(9);
+    espnowStart(chan);
     while(!espNowRadioClient.initDone()) {
       for(int i = 0;i < 100;i++) {
         espnowWrapper.loop();
@@ -304,22 +338,15 @@ void setup() {
       }
     }
     espnowWrapper.end();
-  ttgo->tft->printf("DONE!\r\n");
-
-  lvglSetup();
+#if defined(ARDUINO_T_Watch)    
+  ttgoSetup();
   setCpuFrequencyMhz(80);
-  pinMode(AXP202_INT, INPUT_PULLUP);
-  attachInterrupt(AXP202_INT, [] {
-        pwrKeyFlag = true;
-   }, FALLING);
-   ttgo->power->enableIRQ(AXP202_PEK_SHORTPRESS_IRQ,
-                     true);
-  ttgo->power->clearIRQ();
+#endif
 
 }
 
 void loop() {
-    lv_task_handler();
+  performanceLoop();
   if (volumeChangeTime)
     if (volumeChangeTime < millis()) 
     {
@@ -384,7 +411,22 @@ void loop() {
       toSend[len] = 0;
     }
   }
-  if (statusUpdated) {
+
+#if defined(ARDUINO_T_Watch)
+  ttgoLoop();  
+#endif  
+}
+
+
+
+#if defined(ARDUINO_T_Watch)
+void performanceLoop(void) {
+    lv_task_handler();  
+}
+
+
+void ttgoLoop(void) {
+    if (statusUpdated) {
     statusUpdated = false; 
     if (millis() > statusUpdateBlockTime) {
       lv_textarea_set_text(radioText, espNowRadioClient._radioText);
@@ -397,9 +439,7 @@ void loop() {
     }
   }
   low_energy();
-}
-void performanceLoop(void) {
-    lv_task_handler();  
+
 }
 
 void low_energy()
@@ -427,4 +467,9 @@ void low_energy()
         statusChangeTime = millis() + 200;
     }
 }
+#else
 
+void performanceLoop(void) {
+  
+}
+#endif

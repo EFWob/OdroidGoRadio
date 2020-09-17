@@ -2601,6 +2601,8 @@ ESPNowRadioServer::ESPNowRadioServer(const uint8_t* mac): ESPNowServiceHandlerCl
          espnowWrapper.addServiceHandler(this);
          if (isBroadcastMac())
             StatemachineLooper.add(this);
+         else
+          espnowWrapper.addPeer(mac);
       };
   
 void ESPNowRadioServer::flushRX(const uint8_t *mac, const uint8_t packetId, const uint8_t *data, const uint8_t dataLen) {
