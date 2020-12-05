@@ -1,4 +1,5 @@
-#include "src/libraries/ESPNowWrapper.h"
+#include "ESPNowWrapper.h"
+#define SPEEDDOWNTIME             5000
 #define LILYGO_WATCH_LVGL
 #define LILYGO_WATCH_2020_V1             //To use T-Watch2020, please uncomment this line
 #include <LilyGoWatch.h>
@@ -7,6 +8,19 @@
 bool statusUpdated = false;
 bool pwrKeyFlag = false;
 void performanceLoop(void);
+TTGOClass *ttgo;
+lv_obj_t * volumeSlider, *radioText, *stationList, *batteryIndicator, *settingsButton, *headline;
+lv_obj_t *clockDisplay = NULL; 
+uint32_t volumeChangeTime = 0;
+uint8_t volumeValue = 0;
+uint32_t presetChangeTime = 0;
+uint8_t presetValue = 0;
+uint32_t statusChangeTime = 0;
+uint32_t statusFastChangeTime = 0;
+uint32_t statusUpdateBlockTime = 0;
+uint32_t lastStatusUpdateTime = 0;
+uint32_t speedDown = 0;
+
 
 class ESPNowRadioClient: public ESPNowServiceHandlerClass  {
     public:
@@ -20,6 +34,7 @@ class ESPNowRadioClient: public ESPNowServiceHandlerClass  {
       void endRequest(bool waitResponse = false);
       void requestSetVolume(uint8_t val);
       void requestSetPreset(uint8_t val);
+      void requestGetName(void);
       void requestStatus();
     protected:
       void searchChannel();
@@ -27,7 +42,7 @@ class ESPNowRadioClient: public ESPNowServiceHandlerClass  {
       uint8_t _numPresets, _knownPresets, _channel, _minVolume, _maxVolume, _curVolume, _curPreset;
       char *_presets[100];
       char *_radioText = NULL;
-      
+      char *_radioName = NULL;  
 }  espNowRadioClient(broadcastMac);
 
 
@@ -54,6 +69,9 @@ ESPNowRadioClient::ESPNowRadioClient(const uint8_t* mac): ESPNowServiceHandlerCl
          espnowWrapper.addServiceHandler(this);
          _numPresets = _knownPresets = _channel = _minVolume = _maxVolume = _curVolume = 0;
          _curPreset = 0xff;
+#if defined(ESP8266)
+        alwaysSendBroadcast();
+#endif
          for(int i = 0;i < 100;i++)
           _presets[i] = NULL;
       };
@@ -69,6 +87,13 @@ bool ESPNowRadioClient::initDone() {
     }
     return false;
   }
+  if (!_radioName) {
+    if (!_tx) {
+      uint8_t x = 0;
+      setTX((const uint8_t*)&x, 1, 202, 10);
+    }
+    return false;
+    }
   return true;
 }
   
@@ -111,10 +136,13 @@ void ESPNowRadioClient::endRequest(bool responseWait) {
   //setCpuFrequencyMhz(10);
 }
 
-void ESPNowRadioClient::requestSetVolume(uint8_t val) {
+
+
+void ESPNowRadioClient::requestStatus() {
   if (startRequest()) {
-    setTX(&val, 1, 201, 10);
-    endRequest();
+    uint8_t val = 0;
+    setTX(&val, 1, 100, 10);
+    endRequest(true);
   }
 }
 
@@ -125,12 +153,19 @@ void ESPNowRadioClient::requestSetPreset(uint8_t val) {
   }
 }
 
-void ESPNowRadioClient::requestStatus() {
+void ESPNowRadioClient::requestSetVolume(uint8_t val) {
+  if (startRequest()) {
+    setTX(&val, 1, 201, 10);
+    endRequest();
+  }
+}
+
+void ESPNowRadioClient::requestGetName() {
   if (startRequest()) {
     uint8_t val = 0;
-    setTX(&val, 1, 100, 10);
+    setTX(&val, 1, 202, 10);
     endRequest(true);
-  }
+  }  
 }
 
 
@@ -150,7 +185,14 @@ void ESPNowRadioClient::flushRX(const uint8_t *mac, const uint8_t packetId, cons
     if (_radioText)
       free(_radioText);
     _radioText = strdup((char *)data + 5);
+    char s[10];
+    strcpy(s, (char *)data + 6 + strlen(_radioText));
+    Serial.printf("Time: %s\r\n",s);
+    s[5] = 0;
+    if (clockDisplay)
+      lv_label_set_text(clockDisplay, s);
     statusUpdated = true;   
+    lastStatusUpdateTime = millis();
   } else if (100 > packetId) {
     uint8_t nb = data[0] & 0x7f;
     Serial.printf("Found %d presets starting with preset %d\r\n", nb, packetId);
@@ -165,6 +207,11 @@ void ESPNowRadioClient::flushRX(const uint8_t *mac, const uint8_t packetId, cons
     }
     if (data[0] > 128)
       Serial.println("And thats all...."); 
+  } else if (202 == packetId) {
+    if (_radioName)
+      free(_radioName);
+    _radioName = strdup((char *)data);
+    Serial.printf("Radio name is: %s\r\n", _radioName);
   }
 //  char tst[240];
 //  int len = getPresetList((uint8_t *)tst, 240, 0);
@@ -189,15 +236,7 @@ bool espnowStart(uint8_t chan) {
 }
 
 
-TTGOClass *ttgo;
-lv_obj_t * volumeSlider, *radioText, *stationList; 
-uint32_t volumeChangeTime = 0;
-uint8_t volumeValue = 0;
-uint32_t presetChangeTime = 0;
-uint8_t presetValue = 0;
-uint32_t statusChangeTime = 0;
-uint32_t statusFastChangeTime = 0;
-uint32_t statusUpdateBlockTime = 0;
+
 
 
 static void event_handler_volume(lv_obj_t * sldr, lv_event_t event)
@@ -227,6 +266,14 @@ static void event_handler_text(lv_obj_t * sldr, lv_event_t event)
       }
 }
 
+static void event_handler_settings(lv_obj_t * sldr, lv_event_t event)
+{
+    Serial.println("SettingEvent!");
+   if(event == LV_EVENT_RELEASED) {
+      Serial.println("Dann machen wir mal die Settings!");
+      }
+}
+
 
 void lvglSetup() {
     ttgo->lvgl_begin();
@@ -239,8 +286,8 @@ void lvglSetup() {
     lv_obj_set_event_cb(volumeSlider, event_handler_volume);
 
     radioText = lv_textarea_create(lv_scr_act(), NULL);
-    lv_obj_set_size(radioText, 230, 150);
-    lv_obj_set_pos(radioText, 5, 45);
+    lv_obj_set_size(radioText, 230, 120);
+    lv_obj_set_pos(radioText, 5, 70);
     lv_textarea_set_text(radioText, espNowRadioClient._radioText);
     lv_textarea_set_cursor_hidden(radioText, true);
     /*Set an initial text*/
@@ -248,12 +295,39 @@ void lvglSetup() {
 
     stationList = lv_dropdown_create(lv_scr_act(), NULL);
     lv_obj_set_size(stationList, 230, 35);
-    lv_obj_set_pos(stationList, 5, 5);
+    lv_obj_set_pos(stationList, 5, 30);
     for (int i = 0;i < espNowRadioClient._numPresets;i++)
       lv_dropdown_add_option(stationList, espNowRadioClient._presets[i], i);
     lv_dropdown_set_selected(stationList, espNowRadioClient._curPreset);
     lv_obj_set_event_cb(stationList, event_handler_preset);
-          
+
+    headline = lv_cont_create(lv_scr_act(), NULL);
+    lv_obj_set_size(headline, 238, 25);
+    lv_obj_set_pos(headline, 1, 1);
+    lv_obj_set_event_cb(headline, event_handler_settings);
+
+    
+    batteryIndicator = lv_label_create(headline, NULL);
+    lv_label_set_text(batteryIndicator, LV_SYMBOL_BATTERY_FULL " xx%");
+//    lv_obj_move_foreground(batteryIndicator);
+//    lv_obj_set_pos(batteryIndicator, 15, 5);
+    lv_obj_align(batteryIndicator, NULL, LV_ALIGN_IN_TOP_LEFT, 3, 2);
+    
+    clockDisplay = lv_label_create(headline, NULL);
+    lv_label_set_text(clockDisplay, "xx:yy");
+//    lv_obj_move_foreground(clockDisplay);
+//    lv_obj_set_pos(clockDisplay, 90, 5);
+    lv_obj_align(clockDisplay, NULL, LV_ALIGN_IN_TOP_MID, 0, 2);
+    lv_obj_set_auto_realign(clockDisplay, true);
+//    lv_obj_set_event_cb(clockDisplay, event_handler_settings);
+
+
+    settingsButton = lv_label_create(headline, NULL);
+    lv_label_set_text(settingsButton, LV_SYMBOL_SETTINGS);
+    lv_obj_align(settingsButton, NULL, LV_ALIGN_IN_TOP_RIGHT, -3, 2);
+//    lv_obj_set_event_cb(settingsButton, event_handler_settings);
+    
+    ttgo->power->adc1Enable(AXP202_VBUS_VOL_ADC1 | AXP202_VBUS_CUR_ADC1 | AXP202_BATT_CUR_ADC1 | AXP202_BATT_VOL_ADC1, true);
 }
 
 void setup() {
@@ -307,7 +381,8 @@ void setup() {
   ttgo->tft->printf("DONE!\r\n");
 
   lvglSetup();
-  setCpuFrequencyMhz(80);
+  //setCpuFrequencyMhz(80);
+  speedDown = millis() + SPEEDDOWNTIME;
   pinMode(AXP202_INT, INPUT_PULLUP);
   attachInterrupt(AXP202_INT, [] {
         pwrKeyFlag = true;
@@ -319,7 +394,11 @@ void setup() {
 }
 
 void loop() {
-    lv_task_handler();
+  if (speedDown)
+    if (millis() >= speedDown) {
+      setCpuFrequencyMhz(80);
+      speedDown = 0;
+    }
   if (volumeChangeTime)
     if (volumeChangeTime < millis()) 
     {
@@ -335,7 +414,9 @@ void loop() {
       espNowRadioClient.requestSetPreset(presetValue);
       presetChangeTime = 0;
       statusChangeTime = millis() + 2000;
-      statusFastChangeTime = millis() + 10000;
+      statusFastChangeTime = millis() + 5000;
+      setCpuFrequencyMhz(240);
+      speedDown = millis() + SPEEDDOWNTIME;
     }
     
   if (millis() > statusChangeTime) {
@@ -396,9 +477,32 @@ void loop() {
       Serial.printf("Preset = %d, RadioText = %s\r\n", espNowRadioClient._curPreset, espNowRadioClient._radioText);
     }
   }
+  performanceLoop();
   low_energy();
 }
 void performanceLoop(void) {
+    char s[10];
+    if (ttgo->power->isVBUSPlug()) {
+      strcpy(s, LV_SYMBOL_USB "     ");
+    } else {
+      char* s1;
+      int percentage = ttgo->power->getBattPercentage();
+      if (percentage > 80)
+        s1 = LV_SYMBOL_BATTERY_FULL;
+      else if (percentage > 60)
+        s1 = LV_SYMBOL_BATTERY_3;
+      else if (percentage > 40)
+        s1 = LV_SYMBOL_BATTERY_2;
+      else if (percentage > 15)
+        s1 = LV_SYMBOL_BATTERY_1;
+      else
+        s1 = LV_SYMBOL_BATTERY_EMPTY;
+      sprintf(s, "%s %2d%%", s1, percentage);
+    }
+    lv_label_set_text(batteryIndicator, s);
+    if (clockDisplay)
+      if (millis() - lastStatusUpdateTime > 90000)
+         lv_label_set_text(clockDisplay, espNowRadioClient._radioName);
     lv_task_handler();  
 }
 
@@ -417,7 +521,8 @@ void low_energy()
         setCpuFrequencyMhz (10); 
         while(!pwrKeyFlag)
           delay(100);
-        setCpuFrequencyMhz (80); 
+        setCpuFrequencyMhz (240);
+        speedDown = millis() + SPEEDDOWNTIME; 
         ttgo->power->clearIRQ();
         pwrKeyFlag = false;  
         ttgo->startLvglTick();

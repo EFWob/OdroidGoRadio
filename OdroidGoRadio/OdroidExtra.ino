@@ -2581,6 +2581,10 @@ uint16_t size1;
     }
     size1++; 
   }
+  if (size > size1 + strlen(timetxt)) {
+    memcpy(buf + size1, timetxt, strlen(timetxt) + 1);
+    size1 = size1 + strlen(timetxt) + 1;
+  }
   return size1;
 }
 
@@ -2639,6 +2643,9 @@ ESPNowRadioServer *clientHandler = this;
       sprintf(s, "%d", data[0]);
       analyzeCmd("volume", s);
     }
+  } else if (packetId == 202) {
+    strcpy(tst, NAME);
+    len = strlen(NAME) + 1;
   }
   if (len > 0)
     clientHandler->setTX((const uint8_t *)tst, len, packetId, 3);

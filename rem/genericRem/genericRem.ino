@@ -330,6 +330,10 @@ void setup() {
 #endif
      espnowWrapper.end();
     delay(500);
+#if defined(ESP8266)
+        espNowRadioClient.alwaysSendBroadcast();
+#endif
+
     espnowStart(chan);
     while(!espNowRadioClient.initDone()) {
       for(int i = 0;i < 100;i++) {
