@@ -1,9 +1,9 @@
 #ifndef __ODROIDEXTRA__H_
 #define __ODROIDEXTRA__H_
 //#include <odroid_go.h>
-#include "src/libraries/Display.h"
-#include "src/libraries/ESPNowWrapper.h"
-#include "src/libraries/BasicStatemachineOdroid.h"
+#include "./src/libraries/Display.h"
+#include "./src/libraries/ESPNowWrapper.h"
+#include "./src/libraries/BasicStatemachineOdroid.h"
 #define ODROIDRADIO_VERSION "202006182336"
 // Data to display.  There are TFTSECS sections
 #define TFTSEC_TOP        0             // Index for Top line, normal play
