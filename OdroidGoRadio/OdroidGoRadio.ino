@@ -2463,7 +2463,7 @@ bool connectwifi()
     pfs = dbgprint ( "IP = %s", ipaddress.c_str() ) ;   // String to dispay on TFT
   }
   tftlog ( pfs ) ;                                      // Show IP
-  delay ( 3000 ) ;                                      // Allow user to read this
+//  delay ( 3000 ) ;                                      // Allow user to read this
 #if not defined(ARDUINO_ODROID_ESP32)
   //disable annoying char on ODROID Display
   tftlog ( "\f" ) ;                                     // Select new page if NEXTION 
@@ -6019,4 +6019,3 @@ void spftask ( void * parameter )
   }
   //vTaskDelete ( NULL ) ;                                          // Will never arrive here
 }
-

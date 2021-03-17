@@ -3,7 +3,7 @@
 #define defaultprefs_version 1808016
 const char defprefs_txt[] PROGMEM = R"=====(
 # Set WiFi credentials here!
-wifi_00 = YourSSID/YourPassword!
+wifi_00 = YourSSID/ThePassword
 # uncomment the following line(s) if you need access to more than one WiFi network with the same device (
 #wifi_01 = AnotherSSID/WithAnotherPassword!
 #wifi_02 = YetAnotherSSID/WithYetAnotherPassword!
@@ -88,7 +88,8 @@ preset_55 = stream.srg-ssr.ch/m/drsmw/mp3_128        #   SRF Musikwelle
 preset_56 = www.ndr.de/resources/metadaten/audio/m3u/ndr1niedersachsen.m3u #  NDR1 Niedersachsen
 preset_57 = sc2b-sjc.1.fm:10020                      #  1fm Samba Brasil
 preset_58 = 1a-entspannt.radionetz.de:8000/1a-entspannt.mp3      #   Entspannt
-preset_59 = tx.planetradio.co.uk/icecast.php?i=absolute60s.mp3     #   Absolute 60s
+preset_59 = tx.planetradio.co.uk/icecast.php?i=absolute60s.mp3     #   Absolute 
+preset_60 = hr-hr2-live.cast.addradio.de/hr/hr2/live/mp3/128/stream.mp3 # HR2
 #
 toneha = 5
 tonehf = 2
