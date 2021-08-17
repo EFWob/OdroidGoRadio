@@ -1,10 +1,13 @@
 //*  ESP32_Radio -- Webradio receiver for ESP32, VS1053 MP3 module and optional display.            *
 //*                 By Ed Smallenburg.                                                              *
 //***************************************************************************************************
-#if defined(ARDUINO_ODROID_ESP32)
+// #if defined(ARDUINO_ODROID_ESP32) || defined(ARDUINO_M5STACK_FIRE)
 // All changes for ODROID-GO can be identified by searching for "defined(ARDUINO_ODROID_ESP32)
 // This even holds true for comment sections like this one here.
-#endif 
+// #if defined(ARDUINO_M5STACK_FIRE)
+#define ARDUINO_ODROID_ESP32
+// #endif
+// #endif 
 // ESP32 libraries used:
 //  - WiFiMulti
 //  - nvs
@@ -264,6 +267,7 @@ void        reservepin ( int8_t rpinnr ) ;
 //**************************************************************************************************
 //
 
+/*
 struct scrseg_struct                                  // For screen segments
 {
   bool     update_req ;                               // Request update of screen
@@ -276,6 +280,7 @@ struct scrseg_struct                                  // For screen segments
   uint16_t x;                                         // x coordinate. Will be 0 normally
 #endif
 } ;
+*/
 
 enum qdata_type { QDATA, QSTARTSONG, QSTOPSONG } ;    // datatyp in qdata_struct
 struct qdata_struct
@@ -1364,6 +1369,8 @@ void tftset ( uint16_t inx, const char *str )
     if ( str )                                          // String specified?
     {
       tftdata[inx].str = String ( str ) ;               // Yes, set string
+//      if (0 == inx)
+  //      Serial.printf("TFTDATA[0] set to: %s\r\n", str);
     }
     tftdata[inx].update_req = true ;                    // and request flag
   }
@@ -2182,7 +2189,7 @@ bool connecttohost()
   stop_mp3client() ;                                // Disconnect if still connected
   dbgprint ( "Connect to new host %s", host.c_str() ) ;
 #if defined(ARDUINO_ODROID_ESP32)
-  tftset ( 0, "ODROID-GO-Radio" );
+  // tftset ( 0, "ODROID-GO-Radio" );
 #else
   tftset ( 0, "ESP32-Radio" ) ;                     // Set screen segment text top line
 #endif
@@ -3568,7 +3575,7 @@ void setup()
              ESP.getCpuFreqMHz(),
              VERSION,
              ESP.getFreeHeap() ) ;                       // Normally about 170 kB
-#if defined ( BLUETFT )                                // Report display option
+#if defined( BLUETFT )
   dbgprint ( dtyp, "BLUETFT" ) ;
 #endif
 #if defined ( ILI9341 )                                // Report display option
@@ -3804,9 +3811,16 @@ extern bool ignoreSD();
   }
   if ( tft )
   {
+#if defined(ARDUINO_ODROID_ESP32)
+    dsp_fillRect ( 0, 8 + tftdata[0].y,                                  // Clear most of the screen
+                   dsp_getwidth(),
+                   dsp_getheight() - 8 - tftdata[0].y, BLACK ) ;
+    dsp_setCursor ( 0, tftdata[1].y ) ;                           // Top of screen
+#else  
     dsp_fillRect ( 0, 8,                                  // Clear most of the screen
                    dsp_getwidth(),
                    dsp_getheight() - 8, BLACK ) ;
+#endif
   }
   outchunk.datatyp = QDATA ;                              // This chunk dedicated to QDATA
   adc1_config_width ( ADC_WIDTH_12Bit ) ;
@@ -3981,6 +3995,16 @@ void handlehttpreply()
       }
       else
       {
+#if defined(ARDUINO_ODROID_ESP32)
+        if ( http_rqfile.startsWith("genre" ))
+        {
+          //dbgprint("Running GENRE(%s) with command: %s", http_rqfile.c_str(), http_getcmd.c_str());
+          httpHandleGenre ( http_rqfile, http_getcmd ) ;
+        }
+        else
+#endif
+        
+
         if ( http_getcmd.length() )                         // Command to analyze?
         {
           dbgprint ( "Send reply for %s", http_getcmd.c_str() ) ;
@@ -5394,6 +5418,16 @@ const char* analyzeCmd ( const char* par, const char* val )
   else if ( argument.indexOf ( "preset_" ) >= 0 )     // Enumerated preset?
   { // Do not handle here
   }
+#if defined(ARDUINO_ODROID_ESP32)
+  else if ( argument == "gpreset" )
+  {
+    doGpreset ( value ) ;
+  }
+  else if ( argument == "genre" )
+  {
+    doGenre ( argument, value ) ;
+  }
+#endif
   else if ( argument.indexOf ( "preset" ) >= 0 )      // (UP/DOWN)Preset station?
   {
     // If MP3 player is active: change track
@@ -5643,15 +5677,17 @@ void displayinfo ( uint16_t inx )
       dsp_fillRect ( x, p->y - 4, width, 1, GREEN ) ;      // Yes, show divider above text
     }
     len = p->str.length() ;                                // Required length of buffer
+    char buf [ len + 1 ] ;                                 // Need some buffer space
+    buf[0] = 0;
     if ( len++ )                                           // Check string length, set buffer length
     {
-      char buf [ len ] ;                                   // Need some buffer space
       p->str.toCharArray ( buf, len ) ;                    // Make a local copy of the string
       utf8ascii ( buf ) ;                                  // Convert possible UTF8
       dsp_setTextColor ( p->color ) ;                      // Set the requested color
       dsp_setCursor ( x, p->y ) ;                          // Prepare to show the info
       dsp_println ( buf ) ;                                // Show the string
     }
+    dbgprint("Print tftsec[%d]=\"%s\"", inx, buf);
   }
 
 #else

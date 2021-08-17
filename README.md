@@ -1,9 +1,18 @@
 # Odroid-Go-Radio
-## Caveat Emptor
-This is beta SW. 
+## Latest updates
+You can now play stations from genre lists (i. e. Pop, Rock, etc...) that are synchronized using a public radio database server (https://www.radio-browser.info/#/). 
+This database has more than 27,000 stations organised in different categories (by region or genre tags). With this addition, you can 
+download stations from that radio database as given by their genre-tag. As a result you can have more station lists
+(in addition to the default preset list in NVS) to chose from.
+By now, that lists are organized by genre tag only. So you can create lists like "Pop", "Rock", etc. but not for instance by country.
 
-For testing, the SW runs in demo mode without a VS1053 module connected. All buttons are fully functional, but there will 
-be no noticable audio output...
+The Genre lists will be stored in Flash using LITTLEFS. Therefore, you want to have a SPIFFS partition as big as possible. The Odroid has 
+16MB Flash, unfortunately the default partitions suggested in Arduino for the Odroid do not make use of those MBs for flash. Workaround (tested) is 
+to set the board "M5Stack-FIRE" and Partition Scheme "Large SPIFFS" in the Arduino Tools-Menu.
+
+Three more libraries are needed compared to the previous release, see [Compiling](#compiling) below.
+
+Before using Genre playlist, you must download the playlists from the radio database. See [Using Genres](#using-genres) below.
 
 ## Basic Idea
 This is a project to port the ESP32-Radio by Edzelf (see https://github.com/Edzelf/ESP32-Radio) to the Odroid-Go to use the 
@@ -12,8 +21,10 @@ display and the buttons to control the radio.
 It also features a very cool 14 channel spectrum analyzer (see Menu3 below). The spectrum analyzer will not work if VS1053 is
 not connected (i. e. if radio is in demo mode).
 
-It will compile in Arduino-IDE. You have to make sure to set the board to "ODROID ESP32" as conditional compile is used 
-to apply some changes to the base software.
+For testing, the SW runs in demo mode without a VS1053 module connected. All buttons are fully functional, but there will 
+be no noticable audio output...
+
+It will compile in Arduino-IDE. 
 
 Note that this project is going on for quite some time already. I originally branched from Version "Thu, 14 Oct 2018 07:22:32 GMT".
 
@@ -32,13 +43,18 @@ The connection to the VS1053 is done through the Odroid-header pins as follows (
 
 ## Compiling
 * Arduino-IDE v1.8 or later (tested v1.8.5, required at least v1.8.0)
-* ESP32-Core (tested v1.0.4)
+* ESP32-Core (tested v1.0.6)
 * Other libraries needed:
 	* time.h (Michael Margolis, maintainer Paul Stoffregen, v1.5.0)
 	* PubSubClient.h (by Nick O'Leary, v2.7.0)
+	* Base64 (by Arturo Guadalupi, v1.0.0) (new for this release)
+	* ArduinoJson (by Benoit Blanchon, v6.13.0) (new for this release)
+	* LittleFS_esp32 (by lorol v1.0.6) (new for this release)
+	bblanchon/ArduinoJson
+
 * Other versions might work too, its just untested. Please let me know if you encounter any difficulties.
-* Select Board "ODROID ESP32". This is important, otherwise it will not include 
-all the specific funtionalities for Odroid-Go.
+* Select Board "M5Stack-FIRE" and Partition Scheme "Large SPIFFS". In fact, any board definition should be fine, however the ones with
+PSRAM enabled and a large SPIFFS should be preferred ("ODROID ESP32" as usual will work fine, too with less space for genre playlists in SPIFFS).
 * All other settings should be standard (Flash Mode QIO, Partition Scheme Standard, Flash Frequency 80 Mhz, Upload Speed 921600 in my case)
 
 ## Limitations
@@ -118,7 +134,163 @@ the preset list.
 #### By Channel list
 By pressing (Up) or (Down) in normal screen, a station list will appear that allows to browse through all defined presets.
 Empty (not defined) presets are not shown in this list (also not the preset number). A station can be started by pressing 
-(Right). The list will be cancelled if (Right) is pressed or after a timeout without any user input.
+(Right). The list will be cancelled if (Left) is pressed or after a timeout without any user input.
+
+
+## Using Genres
+### Loading Genres
+Befor using genre playlists, you must download them to the Odroid. The playlists will be stored in the Flash-Filesystem, so you probably want to 
+use a huge SPIFFS partition (see [Compiling](#compiling) above). This setting can not be changed at runtime!!
+
+The genre playlists of the Odroid are maintained using the public radio database server (https://www.radio-browser.info/#/). 
+This database has more than 27,000 stations organised in different categories (by reagion or genre tags). With this addition, you can 
+download stations from that radio database as given by their genre-tag. As a result you can have more station lists
+(in addition to the default preset list in NVS) to chose from.
+By now, that lists are organized by genre tag only. So you can create lists like "Pop", "Rock", etc. but not for instance by country.
+
+### Creating genre playlists
+A specific playlist can have any number of stations, as long as there is free flash left in the flash file system.
+Unlike the preset list, the station URLs are not entered direct, but are downloaded from the database above. 
+For maintaining the genre playlist, you need to open the URL http://RADIO-IP/genre.html. The first time you do so
+you should see the following. 
+![Web API for genre](pics/genre0.jpg?raw=true "Empty genre playlists")
+
+There are two main parts on that page:
+- on top (currently empty) is the list of genres that are already loaded into the radio.
+- the bottom section is the interface to the internet radio database.
+
+You first should start with the interface to the radio database. In the leftmost input, enter (part) of a genre tag name, e. g. "rock". Enter a minimum number of stations that should be returned for each list (if the number of 
+stations is less than that number, that specific list is not returned). Can be left empty, try 20 for now. If you press "Apply Filter" (ignore the right input field for now) you should see the result of the database request after 
+a few moments:
+
+![Web API for genre](pics/genre1.jpg?raw=true "Radio database answered the request")
+
+The result list at the bottom just shows the result of the request, the lists are not yet loaded to the radio.
+In the dropdown at the right side of the result list you can choose which entries you want to "Load" to the radio.
+When decided, press the button labelled "HERE" at the bottom of the page. Only then the station lists selected will
+be loaded into the radio. The website will show the progress:
+
+![Web API for genre](pics/genre2.jpg?raw=true "Transfer from radio database to radio")
+
+While you see that page, do not reload the page or load any other page into this tab as otherwise transfer will be
+cancelled. If you accidentially cancel the tansfer, the radio will still be in a consistent state. Just the list(s) of stations will be truncated/incomplete.
+After the transfer is completed, the page will automatically reload and should look like this:
+
+![Web API for genre](pics/genre3.jpg?raw=true "First genre playlists loaded to radio")
+
+More often than not, you will notice that the stations of your interest are distributed over several genre groups on 
+the database. Like in our example "indie rock", "pop rock" and "progressive rock" we just loaded would be an example of "subgenres" for rock. 
+
+As you will see later, you can only select one of those genres. You can however cluster the result list from the database into a "Cluster" called "Rock". There is only requirement for the clustername: it must start with a letter. And that first letter will be converted into uppercase automatically. All genre names in the database are returned in always lowercase letters. That way, you can have a cluster called "Rock" that can be distinguished from the "native" genre "rock".
+
+So instead of loading 3 seperate genres, you could chose the Action "Add to:" for the genres of choice. You must enter the desired cluster name ("Rock" in our example) into the input field right of the button "Apply Filter".
+
+![Web API for genre](pics/genre4.jpg?raw=true "Creating cluster Rock from 3 genres")
+
+
+Clusters must not be created in one step, you can always add more stations from another database request later.
+You can however not delete a subgenre from a cluster (but only delete the whole cluster).
+If you press on the station number of a Cluster in the page section "Maintain loaded Genres" a popup will show which genres from the database are clustered into.
+
+![Web API for genre](pics/genre5.jpg?raw=true "In the maintenance section")
+
+
+In the maintenance section you can also Delete or Refresh any or all of the genres loaded into the database (a cyclic refresh is needed to throw out station URLS that got nonoperational in between).
+
+If you click on a genre name on the left side in this list, the radio will play a (random) station from that genre.
+(If you press again, another random station from that list will be played).
+That is currently the only way to play from a genre using the web-interface.
+
+Some details:
+Each genre name (either if coming direct from the database or a user defined clustername) must be unique. From the database that is guaranteed. The API does not allow to download the same genre twice. Clusternames are different 
+from loaded genre names because they always start with an uppercase letter. You can use the same cluster name again in further database requests to add more genres into it. You cannot add the same genre twice to the same cluster, but you can add the same genre to more than one cluster.
+You cannot edit the resulting playlist any further. You can not add single station URLs "by hand", you can not delete a genre from a cluster. You can only delete the full cluster (or a whole genre).
+
+With the default partition the file system is big enough to support (estimate) between 10,000 and 12,000 stations in total. (With the radio4MB_default partition it is still somewhat in between 8,000 and 10,000). For instance the radio that I just use for debugging has a total of 3182 stations stored which consumes 360,448 of 1,114,112 bytes of the flash file system leaving more than 66 per cent free for further playlists.
+
+
+The Web interface can hande extended unicode characters. The only thing thats not working currently is if the genre name of the database contains the '/'-character. That I have seen on one genre so far and already forgotten again what it was, so it is currently no priority...
+
+On the Odroid display special Unicode characters can not be displayed properly. The result shortened (or empty) list entries on the Odroid display,
+that can be selected correctly nnonetheless. The same applies to station names including unicode characters.
+
+![Web API for genre](pics/genreunicode.jpg?raw=true "Unicode is fine (but not for ODROID display")
+
+
+### Using genre playlists
+A playlist can be selected by the command interface by using the command
+_genre=Rock_
+to play one genre playlist. If that genre exists (as a cluster in this example, but could also be a native genre name from a direct download). 
+**Remeber that genre playlist names are case sensitive.** Genres loaded from database direct will always have 
+lowercase letters only, while cluster names start with an uppercase letter (followed by only lowercase letters).
+So, _Rock_ is a valid name for a cluster, _rock_ is a valid name for a genre tag from the internet radio database,
+but constucts like _ROCK_ or _rOcK_ are invalid. When in doubt, copy the name from the web API.
+
+If a valid genre name has been assigned (and that genre exists in SPIFFS), the radio will start to play a random station from that genre. If the same command is issued again (with the same name), another (random) station from that genre will play.
+
+You can switch to a station direct using the command 
+
+_gpreset=Number_  
+
+where Number can be any number. If this number (lets call it n) is between 0 and 'number of stations in that genre - 1', the n-th entry of that list is selected. N can also be greater than the number of stations (or even below zero), modulo function is used in that case to map n always between 0 and 'number of stations in that genre' - 1.
+
+If no genre has been set by the _genre=XXXX_ command above, _gpreset=n_ has no effect.
+
+So selecting a station is still "fishing in the dark", but it is at least reproducible (if you find that favorite station of yours at index 4711).
+
+If you issue command _genre=Anothername_ with another genre name, the radio will switch to that genre.
+
+If you issue command with no name (empty), the genre playmode will be stopped. The current station will continue to
+play (until another preset or channel is selected). _gpreset=n_ however will have no effect. You can also issue the command _genre_ with parameter _genre=--stop_ to achieve the same if you prefer a more clear reading.
+
+You can also switch stations within a genre using the _channel_ command from above. To do so, a channel-list must be defined.
+The preset-numbers assigned to the channel entries are ignored, just the size of the channel list is important.
+In the channel example above we defined a channel list with 9 channels. If you switch to genre-playmode, that channel
+list can be used to change stations within that genre by the following algorithm:
+- each channel has a random number between 0 and 'number of channels in that genre - 1' assigned.
+- one of the channel entries is the current channel (the one last selected by _channel=n_)
+- the distance between two channel stations is the same for all neighbors (and wrapped around between channel 9 and 1) in our example. So if in our case we would have a genre list with 90 stations, the distance between two channels would be 10.
+- example list in that case could be Channel 1: 72, Channel 2: 82, Channel 3: 2, Channel 4: 12 .... Channel 9: 62
+- that assignment stays stable until:
+  - a new random station is forced by the command _genre = Xxxxxx_, this will result in a completely different list.
+  - a new station is forced by the command _gpreset = n_
+  - the command _channe=up_ is issued. The numbers associated to the channels are increased by one (as well as the currently playing station from the genre will be switched to next in list)
+  - the command _channel=down_ is issued. The numbers in the channellist are decreased by 1 (also for the current station)
+  - the command _channel=any_ is issued. This will result in playing another (random) station and will also result in
+    a completely different list.
+
+
+
+### Configuring anything around genres
+
+To configure genre settings use the command 
+
+**_gcfg.subcommand=value_**
+
+The command can be used from command line or from the preference settings in NVS. If not set in the preferences (NVS) all settings are set to the defaults described below.
+
+The following commands (including subcommands) are defined:
+
+- **_gcfg.path=/root/path_** All playlist information is stored in Flash (using LITTLEFS) or on SD-Card. If path value does start with 'SD:' (case ignored), the genre lists will be stored on SD card using the path following the token 'SD:'. If not, the genre information is stored in Flash, using LITTLEFS with path '/root/path' in this example.
+No validity checking, if the given path does not exists or is invalid, genre playlists will be dysfunctional. (For historic reason, **defaults to '/____gen.res/genres'**). Must not end with '/'! Can be changed at any time (to allow for different genre playlists for different users).
+- **_gcfg.host=hostURL_** Set the host to RDBS. **Defaults to 'de1.api.radio-browser.info'** if not set. 'de', 'nl', 'fr' can be used (as short cuts) to address 'de1.api.radio-browser.info', 'nl1.api.radio-browser.info' or 'fr1.api.radio-browser.info' respectively. Otherwise full server name must be given.
+- **_gcfg.nonames=x_** if x is nonZero, station names will be stored in genre playlists (not just URLs). Currently, station names from genre playlists are not used at all but might be useful in future versions. When short on storage, set to '1'. **Defaults to 0**, so station names will be stored.
+
+### Considerations (and limitations) around using genre playlists
+
+The total number of genre lists is limited (to 1000). This is a compile time limitation that can not be changed by a command or a preference setting. 
+
+For faster access, some information is cached. For caching, PSRAM is preferred. If PSRAM is not available, normal heap is used. PSRAM should be plenty, however, if there is no sufficient heap, operation might be slower. (Use command _test_ from the Serial input. If the reported Free Memory is below 100.000, it is likely that RAM caching is
+not available.)
+
+On a board with 16MB flash I was able to load around 33.000 stations within 740 genres before the flash was fully used. With SD-card even more will be possible. However, SD access is slower. It is using shared access with the SPI. You will notice quite a few debug messages saying "SPI semaphore not taken...". That is annoying but still fine. It is probably advisable to stop radio playback (using _stop_ from the Serial command line) to limit the access conflicts on the SPI bus if you maintain the genre playlists (adding/deleting/reloading).
+
+If the radio stream stalls, the radio has a fallback strategy to switch to another preset. If that happens when playing from a genre playlist, the radio would fall back to a preset from the preset list in preferences.
+You will notice that in genre playlist mode this can happen (for remote stations with a bad connection). In a next step, this fallback needs to be recoded to use another station from the current genre playlist. If you want to avoid the fallback to a preset from NVS, use the command _preset=--stop_. This will block fallback to a station from presets until a station from presets is requested (for instance by _preset=n_  or _channel=m_ if genre play mode has stopped).
+
+When in genre play mode, you can still issue a _preset=n_ command and the radio will play the according preset from the preferences. However, genre playlist mode will not be stopped: the command _gpreset=n_ as well as _channel=m_ (if channellist is defined) will still operate on the current genre playlist.
+
+
 
 ## MENUs
 ### General

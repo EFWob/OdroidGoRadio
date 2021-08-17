@@ -4,21 +4,125 @@
 #include "src/libraries/Display.h"
 //#include <odroid_go.h>
 #include "OdroidExtra.h"
+#include "genre_html.h"
+#include <Base64.h>
+#include <set>
 
 // VS1053 Plugins Spectrum Analyzer
 
 size_t spectrumAnalyzerPluginSize = 1000;
 extern const uint16_t spectrumAnalyzerPlugin[1000];
 
+ILI9341 *tft = NULL;
 
+/*
+#define TFTSEC_BOT          2             // Index for Bottom text, normal play (usally station name)
+#define TFTSEC_VOL          3             // Index for volume display on change (used also for new station name if preset has been pressed)
+#define TFTSEC_FAV_BOT      4             // Index for showing current selection of favorite bank
+//#define TFTSEC_FAV_STAT     4             // Index for showing status line at Bottom
+#define TFTSEC_FAV          5             // Index for showing favorite stations in current bank
+#define TFTSEC_LIST_CLR     6             // Index for clear text section
+#define TFTSEC_LIST_HLP1    7             // Help text 1 for channel selection list
+//#define TFTSEC_LIST_HLP2    8             // Help text 2 for channel selection list
+#define TFTSEC_LIST_CUR     9             // current selection in list (Channel or Menu)
+#define TFTSEC_LIST_TOP    11             // Top part of channel selection list (Channel or Menu)
+#define TFTSEC_LIST_BOT    12             // Bottom part of channel selection list (Channel or Menu)
+#define TFTSEC_FAV_BUT     13             // Favorite Channels select button display ("<1> <2>"... on top line below buttons) 
+#define TFTSEC_MEN_TOP     14             // Top-Line Menu
+#define TFTSEC_MEN_HLP1    15             // Help Text 1 Menu
+#define TFTSEC_MEN_HLP2    16             // Help Text 2 Menu
+#define TFTSEC_MENU_VAL    10             // updated Menu Item Value
+#define TFTSEC_SPECTRUM    17             // Spectrum Analyzer
+#define TFTSEC_FAV_BUT2    18             // Favorite Channels select button display ("<1> <2>"... on top line below buttons in not Flipped Display) 
+*/
+
+#define TFTSEC_ITEM_SELECT  7
+//#define TFTSEC_LIST_CLR TFTSEC_TXT
+
+scrseg_struct     tftdata[TFTSECS] =                        // Screen divided in 3 segments + 1 overlay
+{                                                           // One text line is 8 pixels
+  { false, WHITE,   2,  8, "", true,0 },                            // 1 top line (TFTSEC_TOP 0)
+  { false, CYAN,   16, 64, "", true,0 },                            // 8 lines in the middle (TFTSEC_TXT 1)
+  { true, YELLOW, 86, 16, "", true,0 },                            // 2 lines at the bottom (TFTSEC_BOT 2)
+  { false, WHITE,  86, 16, "", true,0 },                            // 2 lines at bottom for volume/new selected preset (TFTSEC_VOL 3)
+  { true, WHITE,  106, 8, "Favorites: A1", true,0 },                // 1 lines at bottom for selected Favorites (TFTSEC_FAV_BOT 4)
+  { false, TFT_GREENYELLOW,   16, 64, "", true,0 },                 // 8 lines in the middle for showing favorites (TFTSEC_FAV 5)
+    // identical to TFTSEC_TXT, except color)                       
+  { false, WHITE,   16, 64, "", false,0 },                            // 8 lines in the middle to clear channel selection list (TFTSEC_LIST_CLR 6)
+    // identical to TFTSEC_TXT, except color)                       
+  {false, WHITE, 86, 16, "<UP>/<DOWN> to select\n<LEFT>/<RIGHT> cancel/play", true,0}, // (TFTSEC_LIST_HLP1 7)
+    // identical to TFTSEC_BOT, except color & static text!
+  {false, WHITE, 106, 8, "OBSOLETE", true,0},                         
+  {false, YELLOW, 48, 8, "Station x", true,0},
+  {false, WHITE, 48, 8, "", true,0},                                 // updated menu item 
+  {false, 0xA510, 16, 24, "Station x-2\nStation x-1", true,0},
+  {false, 0xA510, 64, 16, "Station x+1\nStation x+2", true,0},
+  { false, WHITE,   2,  8, "<1>    <2>       <3>   <4>", true,0 },                            // 1 top line
+  { false, WHITE,   2,  8, "MENU                      ", true ,0},                             // 1 top line MENU
+  {false, WHITE, 86, 16, "<UP>   /  <DOWN> to select\n<LEFT> / <RIGHT> to change", true,0},
+  {false, WHITE, 106, 8, "<A> to Save  <B> to Cancel", true,0},
+  {false, TFT_ORANGE, 16, 64, "  ** SPECTRUM ANALYZER **", true, 0},
+  { false, WHITE,   106,  8, "<1>    <2>       <3>   <4>", true,0 },                            // Preset Keys in Upside-Mode
+  {false, WHITE, 106, 8, "<A> for channels", true,0}
+  
+} ;
+
+
+
+#define GENRELOOPSTATE_INIT     0
+#define GENRELOOPSTATE_CACHING  1
+//#define GENRELOOPSTATE_DONE     2
+
+#define GENRELOOPSTATE_DONE     0x8000
+
+
+#define CHANNEL_1     1
+#define CHANNEL_2     2
+#define CHANNEL_3     3
+#define CHANNEL_4     4
+#define CHANNEL_UP    5
+#define CHANNEL_DOWN  6
+#define CHANNEL_DRAW  7
+
+String genreChannel(int id);
 
 
 extern char*       dbgprint( const char* format, ... ) ;
 extern bool time_req;
 extern String nvsgetstr ( const char* key );
+int genreId = 0;
+int genrePresets = 0;
+int genrePreset = 0;
+int genreChannelOffset = 0;
+char *genreSelected = NULL;
+String genreStation;
+
+int listSelectedPreset = 0;
+
+struct cstrless {
+    bool operator()(const char* a, const char* b) {
+      return strcmp(a, b) < 0;
+    }
+};
+
+int genreListId = -1;
+char *genreListBuffer = NULL;
+std::set<const char*, cstrless> genreList;
+
+uint16_t genreLoopState = GENRELOOPSTATE_INIT;
+
 
 class RadioMenu;
 bool nvssetOdroid();
+void genreLoop(bool reset = false);
+void doGenre ( String param, String value );
+void doGenreConfig ( String param, String value );
+int searchGenre(const char * name);
+bool playGenre(int id);
+String split(String& value, char delim);
+bool canAddGenreToGenreId(String idStr, int genreId);
+int handleBtnY(int direction, uint16_t repeats = 0);
+
 
 
 class SpectrumAnalyzer {
@@ -70,6 +174,120 @@ class SpectrumAnalyzer {
 
 } spectrumAnalyzer;
 
+void drawPresetList(int channelX)
+{
+      String str = readStationfrompref(channelX);
+      tftset(TFTSEC_LIST_CUR, str);
+      int channel;
+      listSelectedPreset = channelX;
+      if (100 == (channel = getChannelRelativeTo(channelX, -1)))
+        str = "";
+      else {
+        str = readStationfrompref(channel).substring(0, 25);
+        if (100 == (channel = getChannelRelativeTo(channel, -1)))
+          str = String("\n\n") + str;
+        else {
+          str = readStationfrompref(channel).substring(0, 25) + "\n" + str;
+          if (100 == (channel = getChannelRelativeTo(channel, -1)))
+            str = String("\n") + str;
+          else
+            str = readStationfrompref(channel).substring(0, 25) + "\n" + str;
+
+        }
+      }
+      tftset(TFTSEC_LIST_TOP, str);
+
+      if (100 == (channel = getChannelRelativeTo(channelX, 1)))
+        str = "\n\n";
+      else {
+        str = readStationfrompref(channel).substring(0,25);
+        if (100 != (channel = getChannelRelativeTo(channel, 1)))
+          str = str + "\n" + readStationfrompref(channel).substring(0, 25);
+      }
+      
+      tftset(TFTSEC_LIST_BOT, str);
+}
+
+void drawGenreList(int delta = 0)
+{
+String str;
+std::set<const char*>::iterator it = genreList.begin();
+std::set<const char*>::iterator current;
+      if (NULL != genreSelected)
+        it = genreList.find(genreSelected);
+      else if (delta != 0)
+        return;
+      current = it;
+      if (delta == 1)
+      {
+        ++it;
+        if (it == genreList.end())
+        {
+          it = current;
+          delta = 0;
+        }
+      }
+      else if (delta == -1)
+      {
+        if (it != genreList.begin())
+          --it;
+        else 
+          delta = 0;
+      }
+      if (delta)
+      {
+        if (genreSelected)
+          free(genreSelected);
+        genreSelected = strdup(String(*it).c_str());
+      }
+      if (it != genreList.end())
+      {
+        str = String(*it).substring(0, 25);
+        tftset(TFTSEC_LIST_CUR, str);
+        if (genreSelected)
+          free(genreSelected);
+        genreSelected = strdup(*it);
+        current = it;
+        if (it != genreList.begin())
+        {
+          --it;
+          str = String(*it).substring(0, 25);
+          if (it != genreList.begin())
+          {
+            --it;
+            str = String(*it).substring(0, 25) + "\n" + str;
+            if (it != genreList.begin())
+            {
+              --it;
+              str = String(*it).substring(0, 25) + "\n" + str;              
+            }
+            else
+              str = String("\n") + str;
+          }
+          else
+            str = String("\n\n") + str;
+        }
+        else
+          str = "\n\n\n";
+        tftset(TFTSEC_LIST_TOP, str);
+      }
+      else
+      {
+        
+      }
+      it = current;
+      str = String("");
+      ++it;
+      if (it != genreList.end())
+      {
+        str = String(*it).substring(0, 25);
+        ++it;
+        if (it != genreList.end())
+          str = str + String("\n") + String(*it).substring(0, 25);  
+      }
+      tftset(TFTSEC_LIST_BOT, str);
+}
+
 
 
 
@@ -88,6 +306,31 @@ class RadioStatemachine: public BasicStatemachine {
     void setBacklight(int16_t stateNb);
     void runState(int16_t stateNb);
 } radioStatemachine;
+
+#define BOTTOMLINE_NORMAL 1
+#define BOTTOMLINE_GENRE_START 2
+#define BOTTOMLINE_GENRE_SECOND 3
+#define BOTTOMLINE_GENRE_CHANGE 4
+#define BOTTOMLINE_LIST_PRESETS 5
+#define BOTTOMLINE_LIST_GENRE   6
+#define BOTTOMLINE_NO_GENRES    7
+#define BOTTOMLINE_NO_GENRES2   8
+#define BOTTOMLINE_NO_GENRES3   9
+#define BOTTOMLINE_HAVE_GENRES  10
+
+
+
+class BottomLineStatemachine: public BasicStatemachine {
+  public:
+    BottomLineStatemachine();
+  protected:
+    String _display;
+    int _lastGenre = 0;
+    int _idx = 0;
+    void onEnter(int16_t currentStatenb, int16_t oldStatenb);
+    void runState(int16_t stateNb);
+} bottomLineStatemachine;
+
 
 #define PRESET_SHOWTIME          (1000ul * (uint32_t)odroidRadioConfig.showtime.preset) 
 #define VOLUME_SHOWTIME          (1000ul * (uint32_t)odroidRadioConfig.showtime.volume + 550)
@@ -218,17 +461,19 @@ String readStationfrompref(int fav) {
 
 
 
-#define RADIOSTATE_RUN        1
-#define RADIOSTATE_VOLUME     2
+#define RADIOSTATE_RUN        1     // Normal running (No menues etc)          
+#define RADIOSTATE_VOLUME     2     // Showing volume (in addition to normal running)
 #define RADIOSTATE_PRESETS    3
-#define RADIOSTATE_LIST       4
+#define RADIOSTATE_LIST       4     // List of presets to select from
 #define RADIOSTATE_PRESET_SET 5
-#define RADIOSTATE_LIST_SET   6
+#define RADIOSTATE_LIST_SET   6     // Preset chosen from list (state to avoid volume change)
 #define RADIOSTATE_MENU       7 
-#define RADIOSTATE_MENU_DONE  8 
-#define RADIOSTATE_INICONFIG  9
-#define RADIOSTATE_INIVS     10 
-#define NUM_RADIOSTATES      10
+#define RADIOSTATE_MENU_DONE  8     
+#define RADIOSTATE_INICONFIG  9     // No WiFi found, AP is open for initial config
+#define RADIOSTATE_INIVS     10     // VS1053 not initialized, normal operation not possible
+#define RADIOSTATE_GENRE     11     // List of genres to select from
+//#define RADIOSTATE_GENRE_SET 12     // Genre chosen from list (state to avoid volume change)
+#define NUM_RADIOSTATES      11
 
 class RadioMenu;
 
@@ -933,9 +1178,12 @@ class RadioMenu1: public RadioMenu {
             favoriteGroup = _favBanks->value();
           }
           favoriteIndex[0] = favoriteIndex[1] = (favoriteGroup % _favBanks->value());
+          /*
           sprintf(s, "Favorites: %c%c", 'A' + (favoriteGroup / _favBanks->value()), '1' + (favoriteGroup % _favBanks->value()));
           dbgprint("set favorites: %s ", s);
-          tftset(TFTSEC_FAV_BOT, s); 
+          tftset(TFTSEC_FAV_STAT, s); 
+          */
+          bottomLineStatemachine.setState(BOTTOMLINE_NORMAL);
         }
 
       RadioMenu::menuButton(button, repeats);
@@ -1354,6 +1602,8 @@ void handleBtnAB(uint8_t group, bool released = false) {
   char s[100];
   String str;
   int16_t radioState = radioStatemachine.getState();
+  if (group > 1)
+    return;
   if (released) {
     if (RADIOSTATE_MENU_DONE == radioState)
       radioStatemachine.setState(RADIOSTATE_RUN);
@@ -1373,37 +1623,131 @@ void handleBtnAB(uint8_t group, bool released = false) {
     }
     return;
   }
-  if (group > 1)
-    return;
   if (RADIOSTATE_LIST == radioState)
+  {
+   if (group == 1)
+    {
+      if (-1 != genreListId)
+      {
+        radioStatemachine.setState(RADIOSTATE_GENRE);
+        bottomLineStatemachine.setState(BOTTOMLINE_LIST_GENRE);
+      }
+    }
     return;
+  }
+  if (RADIOSTATE_GENRE == radioState)
+  {
+    if (group == 0)
+    {
+      radioStatemachine.setState(RADIOSTATE_LIST);
+      bottomLineStatemachine.setState(BOTTOMLINE_LIST_PRESETS);
+      handleBtnY(0);
+    }
+    return;
+  }
+  
   if ((RADIOSTATE_PRESETS != radioState) && (RADIOSTATE_PRESET_SET != radioState)) {
-      if ((favoriteGroup / FAVORITE_BANKS) != group)
-        favoriteIndex[group] = 0;    
+      if (genreId)
+        genreChannel(CHANNEL_DRAW);
+      else
+        if ((favoriteGroup / FAVORITE_BANKS) != group)
+        {
+          favoriteIndex[group] = 0;    
+        //
+        }
   }else {
-      if ((favoriteGroup / FAVORITE_BANKS) == group) 
-        favoriteIndex[group] = (1 + favoriteIndex[group]) % FAVORITE_BANKS;    
+      if (genreId)
+      {
+        if (group)
+          genreChannel(CHANNEL_UP);
+        else
+          genreChannel(CHANNEL_DOWN);
+      }
+      else
+      {
+        if ((favoriteGroup / FAVORITE_BANKS) == group) 
+          favoriteIndex[group] = (1 + favoriteIndex[group]) % FAVORITE_BANKS;    
+      }
+  }
+
+  if ( 0 == genreId)
+  {
+    favoriteGroup = group * FAVORITE_BANKS + favoriteIndex[group]; 
+//  Serial.print("Favorite Group: ");Serial.println(favoriteGroup);
+    sprintf(s, "Favorites: %c%d", 'A' + group, 1 + favoriteIndex[group]);
+    tftset(TFTSEC_FAV_BOT, s);
+    sprintf(s, "\nFavorites in %c%d:\n\n", 'A' + group, 1 + favoriteIndex[group]);
+    str = String(s);
+    char* keyLabels[] = {"<1> ", "<2> ", "<3> ", "<4> "};
+    for(int i = 0;i < 4;i++)
+      str = str + keyLabels[i] + readStationfrompref(favoriteGroup * 4 + i) + "\n";
+
+    tftset(TFTSEC_FAV, str);
   }
   if (radioState != RADIOSTATE_PRESETS)
+  {
     radioStatemachine.setState(RADIOSTATE_PRESETS);
+    //bottomLineStatemachine.setState(BOTTOMLINE_NORMAL);
+  }
   else
     radioStatemachine.resetStateTime();
-  favoriteGroup = group * FAVORITE_BANKS + favoriteIndex[group]; 
-//  Serial.print("Favorite Group: ");Serial.println(favoriteGroup);
-  sprintf(s, "Favorites: %c%d", 'A' + group, 1 + favoriteIndex[group]);
-  tftset(TFTSEC_FAV_BOT, s);
-  sprintf(s, "\nFavorites in %c%d:\n\n", 'A' + group, 1 + favoriteIndex[group]);
-  str = String(s);
-  char* keyLabels[] = {"<1> ", "<2> ", "<3> ", "<4> "};
-  for(int i = 0;i < 4;i++)
-    str = str + keyLabels[i] + readStationfrompref(favoriteGroup * 4 + i) + "\n";
-  tftset(TFTSEC_FAV, str);
 }
 
 
 
+String genreChannel(int id)
+{
+  String ret = "";
+  if ((id >= CHANNEL_1) && (id <= CHANNEL_4))
+  {
+    int channel = id - CHANNEL_1;
+    // set a new channel
+    int delta = genrePresets / 4;
+    if (0 == delta)
+      delta = 1;
+    channel = (channel * delta + genreChannelOffset) % genrePresets;
+    doGpreset(String(channel));
+  }
+  else if ((id == CHANNEL_UP) || (id == CHANNEL_DOWN))
+  {
+    if (id == CHANNEL_UP)
+      genreChannelOffset = (genreChannelOffset + 1) % genrePresets;
+    else
+    {
+      genreChannelOffset--;
+      if (genreChannelOffset < 0)
+        genreChannelOffset = genrePresets - 1;
+    }
+    id = CHANNEL_DRAW;
+  }
+  if (id ==  CHANNEL_DRAW)
+  {
+    char s[200];
+    String str = "\n";
+    int delta = genrePresets / 4;
+    if (0 == delta)
+      delta = 1;
+    for(int i = 1;i < 5;i++) {
+      String line = genres.getUrl(genreId, (genreChannelOffset + delta * (i - 1)) % genrePresets, false);
+      const char *p = strchr(line.c_str(), '#');
+      if (p)
+        if (0 < strlen(++p))
+          line = String(p);
+      //line = String((genreChannelOffset + delta * (i - 1)) % genrePresets) + String(" ") + line;
+      if (line.length() > 21)
+        line = line.substring(0, 21) + ">";
+      str = str  + String("<") + String(i) + String("> ") + line + String("\n");
+    }
+
+    tftset(TFTSEC_FAV, str);
+    
+  }
+  return ret;
+}
+
 void handleBtnMemory(int id) {
 int radioState = radioStatemachine.getState();
+String str;
     if (!odroidRadioConfig.misc.flipped)
       id = 5 - id;
     if ((0 == id) || (RADIOSTATE_INIVS == radioState) || (RADIOSTATE_INICONFIG == radioState)) 
@@ -1412,16 +1756,24 @@ int radioState = radioStatemachine.getState();
         radioStatemachine.startMenu(id);
         return;
       }
-      else if (RADIOSTATE_LIST != radioState) {    
-        bool newPreset;
-        char s[100];
-        id = id - 1 + 4 * favoriteGroup;
-        String str = readStationfrompref(id); 
-        if (newPreset = (id != ini_block.newpreset)) {
-          tftset(TFTSEC_TXT, str);
-          tftset(TFTSEC_BOT, str);
-          sprintf(s, "%d", id);
-          analyzeCmd("preset", s); 
+      else if ((RADIOSTATE_LIST != radioState) && (RADIOSTATE_GENRE != radioState)) {    
+        if (genreId)
+        {
+          genreChannel(CHANNEL_1 + id - 1);
+          str = genreStation;
+        }
+        else
+        {
+          bool newPreset;
+          char s[100];
+          id = id - 1 + 4 * favoriteGroup;
+          str = readStationfrompref(id); 
+          if (newPreset = (id != ini_block.newpreset)) {
+            tftset(TFTSEC_TXT, str);
+            tftset(TFTSEC_BOT, str);
+            sprintf(s, "%d", id);
+            analyzeCmd("preset", s); 
+          }
         }     
         tftset(TFTSEC_VOL, str);
         if ((RADIOSTATE_PRESETS != radioState) && (RADIOSTATE_PRESET_SET != radioState)) 
@@ -1456,7 +1808,7 @@ int found = 100;
 }
 
 
-int handleBtnY(int direction, uint16_t repeats = 0) {
+int handleBtnY(int direction, uint16_t repeats) {
 int16_t radioState = radioStatemachine.getState();  
 static int channelX;
 int channelY;
@@ -1466,22 +1818,43 @@ int channelY;
     direction = -direction;
   if (RADIOSTATE_MENU == radioState) {
     radioStatemachine.menuButton((1 == direction)?MENU_DN:MENU_UP, repeats);
-  } else if ((RADIOSTATE_RUN == radioState) || (RADIOSTATE_LIST == radioState) || (RADIOSTATE_PRESETS == radioState) || (RADIOSTATE_PRESET_SET == radioState)
+  } else if ((RADIOSTATE_RUN == radioState) || (RADIOSTATE_LIST == radioState) || (RADIOSTATE_GENRE == radioState) ||
+            (RADIOSTATE_PRESETS == radioState) || (RADIOSTATE_PRESET_SET == radioState)
             || (RADIOSTATE_VOLUME == radioState)) {
     if (RADIOSTATE_LIST == radioState) {
       if (0 != (repeats % KEY_SPEED))
         return channelX;
       radioStatemachine.resetStateTime();
       channelY = getChannelRelativeTo(channelX, direction);
-    } else {
-      channelX = 100;
-      channelY = getChannelRelativeTo(ini_block.newpreset, 0);
+    }
+    else if (RADIOSTATE_GENRE == radioState)
+    {
+       genres.dbgprint("Button Y[dir: %d, repeats: %d]  in Genre mode!", direction, repeats);
+      if (0 != (repeats % KEY_SPEED))
+        return channelX;
+
+       drawGenreList(direction);
+       radioStatemachine.resetStateTime();
+       return -1;
+    }
+    else if ((genreId != 0) && (direction != 0))
+    {
+      radioStatemachine.setState(RADIOSTATE_GENRE);
+      bottomLineStatemachine.setState(BOTTOMLINE_LIST_GENRE);
+      return -1;
+    }
+    else
+    {
+      channelX = channelY = getChannelRelativeTo(ini_block.newpreset, 0);
       radioStatemachine.setState(RADIOSTATE_LIST);
+      bottomLineStatemachine.setState(BOTTOMLINE_LIST_PRESETS);
     }   
     if ((channelY != 100) && (channelX != channelY)) {
 //      Serial.println(String("New Channel(x): ") + channelY);
       int channel = channelY;
       channelX = channelY;
+      drawPresetList(channelX);
+#if defined(OBSOLETE)
       String str = readStationfrompref(channelY);
       tftset(TFTSEC_LIST_CUR, str);
       
@@ -1511,7 +1884,7 @@ int channelY;
       }
       
       tftset(TFTSEC_LIST_BOT, str);
-      
+#endif      
     }
   }
   return channelX;
@@ -1551,28 +1924,44 @@ int16_t radioState = radioStatemachine.getState();
       sprintf(s, "\n       VOLUME: %3d", ini_block.reqvol);
       tftset(TFTSEC_VOL, s);
       return;
-    } else if (RADIOSTATE_LIST == radioState) {
+    } else if ((RADIOSTATE_LIST == radioState) || (RADIOSTATE_GENRE == radioState)) {
         radioStatemachine.resetStateTime();
-        if (1 == dir) {
-          int channel =  handleBtnY(0);
-          if ((channel != 100) && (repeats == 0)) {
-            char s[20];
-            String str = readStationfrompref(channel);
-            sprintf(s, "%d", channel);
-            tftset(TFTSEC_TXT, str);
-            tftset(TFTSEC_VOL, str);
-            tftset(TFTSEC_BOT, str);
-            tftdata[TFTSEC_VOL].hidden = false;
-            analyzeCmd("preset", s);
-            if (odroidRadioConfig.misc.closeListOnSelect)
-              radioStatemachine.setState(RADIOSTATE_LIST_SET);
-          }  
+        if (1 == dir) 
+        {
+          if (RADIOSTATE_LIST == radioState)
+          {
+            int channel =  handleBtnY(0);
+            if ((channel != 100) && (repeats == 0)) 
+            {
+              char s[20];
+              String str = readStationfrompref(channel);
+              sprintf(s, "%d", channel);
+              tftset(TFTSEC_TXT, str);
+              tftset(TFTSEC_VOL, str);
+              tftset(TFTSEC_BOT, str);
+              tftdata[TFTSEC_VOL].hidden = false;
+              bottomLineStatemachine.setState(BOTTOMLINE_NORMAL);
+              playGenre(0);
+              analyzeCmd("preset", s);
+            }
+          }
+          else
+          {
+              if (genreSelected)
+              {
+                doGenre("genre", genreSelected);
+                bottomLineStatemachine.setState(BOTTOMLINE_GENRE_START);
+              }
+              
+            // Select Genre  
+          }
+          if (odroidRadioConfig.misc.closeListOnSelect)
+              radioStatemachine.setState(RADIOSTATE_LIST_SET);  
         } else {
           tftset(TFTSEC_VOL, "<Cancel>");
           radioStatemachine.setState(RADIOSTATE_LIST_SET);
         }
     }
- 
 }
 
 
@@ -1701,6 +2090,8 @@ char s[50];
 int16_t iniVolume;
 // setup initial volume
   if (0 == step) {
+    dsp_println("Try to load Genres.");
+    genres.begin();
     iniVolume = odroidRadioConfig.volume.useStart?odroidRadioConfig.volume.start:ini_block.reqvol; 
     if (iniVolume >= odroidRadioConfig.volume.max)
       iniVolume = odroidRadioConfig.volume.max;
@@ -1722,8 +2113,9 @@ int16_t iniVolume;
           group = (preset / (4 * FAVORITE_BANKS)) % FAVORITE_GROUPS;
           favoriteIndex[group] = (preset % (4 * FAVORITE_BANKS)) / 4;
           favoriteGroup = group * FAVORITE_BANKS + favoriteIndex[group]; 
-          sprintf(s, "Favorites: %c%d", 'A' + group, 1 + favoriteIndex[group]);
-          tftset(TFTSEC_FAV_BOT, s);
+          //sprintf(s, "Favorites: %c%d", 'A' + group, 1 + favoriteIndex[group]);
+          //tftset(TFTSEC_FAV_STAT, s);
+          bottomLineStatemachine.setState(BOTTOMLINE_NORMAL);
           String str = readStationfrompref(preset);
           tftset(TFTSEC_TXT, str);
           tftset(TFTSEC_BOT, str);
@@ -1755,12 +2147,14 @@ int16_t iniVolume;
   return step < 2;      // more to do?
 }
 
+
 void odroidLoop(void) {    
 static bool first = true;
   if (first) {
     first = odroidRadioFirstLoopSetup();
     dbgprint("First loop setup done!");
   } else {
+    genreLoop();
     StatemachineLooper.run();
     runSpectrumAnalyzer();
   }
@@ -1876,7 +2270,7 @@ void dsp_upsideDown()
      bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|bit(TFTSEC_BOT)|bit(TFTSEC_FAV_BOT),                 // RADIOSTATE_RUN ("normal")
      bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|bit(TFTSEC_VOL)|bit(TFTSEC_FAV_BOT),                 // RADIOSTATE_VOLUME (Volume display after change)
      bit(TFTSEC_FAV_BUT)|bit(TFTSEC_FAV)|bit(TFTSEC_BOT)|bit(TFTSEC_FAV_BOT),             // RADIOSTATE_PRESETS (Show preset Bank)
-     bit(TFTSEC_TOP)|bit(TFTSEC_LIST_CLR)|bit(TFTSEC_LIST_HLP1)|bit(TFTSEC_LIST_HLP2)|
+     bit(TFTSEC_TOP)|bit(TFTSEC_LIST_CLR)|bit(TFTSEC_LIST_HLP1)|bit(TFTSEC_FAV_BOT)|
      bit(TFTSEC_LIST_CUR)|bit(TFTSEC_LIST_TOP)|bit(TFTSEC_LIST_BOT),                      // RADIOSTATE_LIST (Select station from list)
      bit(TFTSEC_FAV_BUT)|bit(TFTSEC_FAV)|bit(TFTSEC_VOL)|bit(TFTSEC_FAV_BOT),             // RADIOSTATE_PRSET_SET (After select from preset Bank)
      bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|bit(TFTSEC_VOL)|bit(TFTSEC_FAV_BOT),                  // RADIOSTATE_LIST_SET (After selecting from channel list)
@@ -1884,14 +2278,17 @@ void dsp_upsideDown()
      bit(TFTSEC_LIST_CUR)|bit(TFTSEC_LIST_TOP)|bit(TFTSEC_LIST_BOT)|bit(TFTSEC_MENU_VAL),                      // RADIOSTATE_MENU (Menu active)
      bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|bit(TFTSEC_BOT)|bit(TFTSEC_FAV_BOT),                 // RADIOSTATE_MENU_DONE (wait to release (A) or (B))
      bit(TFTSEC_MEN_TOP)|bit(TFTSEC_LIST_CLR),                                            // RADIOSTATE_INICONFIG
-     bit(TFTSEC_MEN_TOP)|bit(TFTSEC_LIST_CLR)                                             // RADIOSTATE_INIVS
+     bit(TFTSEC_MEN_TOP)|bit(TFTSEC_LIST_CLR),                                             // RADIOSTATE_INIVS
+     bit(TFTSEC_TOP)|bit(TFTSEC_LIST_CLR)|bit(TFTSEC_LIST_HLP1)|bit(TFTSEC_FAV_BOT)|
+     bit(TFTSEC_LIST_CUR)|bit(TFTSEC_LIST_TOP)|bit(TFTSEC_LIST_BOT)                      // RADIOSTATE_GENRE (Select station from list)
+     //bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|bit(TFTSEC_VOL)|bit(TFTSEC_FAV_BOT),                  // RADIOSTATE_GENRE_SET (After selecting from channel list)
     };
 
-char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Presets", "Show List", "Preset set", "List Done", "Menu", "Menu Done", "InitConfig", "ErrorVS1053"};
+char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Presets", "Show List", "Preset set", "List Done", 
+                           "Menu", "Menu Done", "InitConfig", "ErrorVS1053", "Genre List", "Genre List done"};
       dbgprint("RadioState: %d (%s)", currentStatenb, radiostateNames[currentStatenb]);
       bool ignoreSpectrumAnalyzerSection = false;
       tftdata[TFTSEC_TXT].color = CYAN;
-      
       dsp_setRotation();
 
       if ((STATE_INIT_NONE == oldStatenb) && (0 == odroidRadioConfig.start.preset)){
@@ -1907,11 +2304,18 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
       currentStatenb = RADIOSTATE_RUN;
     if (RADIOSTATE_MENU != currentStatenb)
       _currentMenu = NULL;  
-
+    if (RADIOSTATE_RUN == currentStatenb)
+    {
+        tftset(TFTSEC_TOP, "ODROID-GO-Radio");
+    }
     if ((RADIOSTATE_RUN == currentStatenb) || (RADIOSTATE_VOLUME == currentStatenb) || (RADIOSTATE_MENU_DONE == currentStatenb) || (RADIOSTATE_LIST_SET == currentStatenb)) {
 //  These are the states where Spectrum Analyzer (if switched On) or else RadioText is visible
       screenSections[currentStatenb-1] = bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|
             (RADIOSTATE_VOLUME == currentStatenb?bit(TFTSEC_VOL):bit(TFTSEC_BOT))|bit(TFTSEC_FAV_BOT);          // "default" with RadioText
+      if (genreId)
+        bottomLineStatemachine.setState(BOTTOMLINE_GENRE_START);
+      else
+        bottomLineStatemachine.setState(BOTTOMLINE_NORMAL);
       if (spectrumAnalyzer.isActive()) {
         spectrumAnalyzer.reStart();
         dbgprint("Try switch screen to spectrum analyzer");
@@ -1940,7 +2344,19 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
 */
         }
       }
-    } else if (RADIOSTATE_INICONFIG == currentStatenb) {
+    } 
+    else if (RADIOSTATE_LIST == currentStatenb)
+    {
+        tftset(TFTSEC_TOP, "Preset List");
+        drawPresetList(getChannelRelativeTo((RADIOSTATE_GENRE == oldStatenb?listSelectedPreset:ini_block.newpreset), 0));
+    }
+    else if (RADIOSTATE_GENRE == currentStatenb)
+    {
+        tftset(TFTSEC_TOP, "Genre List");
+        drawGenreList();
+    }
+    
+    else if (RADIOSTATE_INICONFIG == currentStatenb) {
       analyzeCmd("stop");
       dsp_erase();
       tftdata[TFTSEC_MEN_TOP].color = TFT_RED;
@@ -2031,12 +2447,13 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
           setState(RADIOSTATE_RUN);
         break;
       case RADIOSTATE_LIST:
+      case RADIOSTATE_GENRE:
         if (LIST_SHOWTIME < getStateTime())
           setState(RADIOSTATE_RUN);
         break;
       case RADIOSTATE_PRESETS:
       case RADIOSTATE_PRESET_SET:
-        if (PRESET_SHOWTIME < getStateTime())
+        if (PRESET_SHOWTIME + (((stateNb == RADIOSTATE_PRESETS) && (0 != genreId))?PRESET_SHOWTIME/2:0) < getStateTime())
           setState(RADIOSTATE_RUN);
         break;  
       case RADIOSTATE_MENU:
@@ -2059,6 +2476,154 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
         break;
     }
   };
+
+
+
+BottomLineStatemachine::BottomLineStatemachine():BasicStatemachine() {
+    StatemachineLooper.add(this);      
+}
+
+void BottomLineStatemachine::onEnter(int16_t currentStatenb, int16_t oldStatenb) {
+char buf[50 + (genreId?genres.getName(genreId).length():0)];
+const char *s = (const char *)&buf;  
+
+  switch(currentStatenb)
+  {
+    case BOTTOMLINE_NORMAL:
+      _lastGenre = 0;
+      sprintf(buf, "Favorites: %c%c", 'A' + (favoriteGroup / FAVORITE_BANKS), '1' + (favoriteGroup % FAVORITE_BANKS));
+      tftdata[TFTSEC_FAV_BOT].color = WHITE;
+      break;
+    case BOTTOMLINE_GENRE_CHANGE:
+      _lastGenre = genreId;
+      s = NULL;
+      break;
+    case BOTTOMLINE_GENRE_START:  
+      tftdata[TFTSEC_FAV_BOT].color = WHITE;
+      _lastGenre = genreId;
+      sprintf(buf, "Genre '%s' (station %d of %d)  ", genres.getName(genreId).c_str(), genrePreset, genrePresets);
+      break;
+    case BOTTOMLINE_GENRE_SECOND:
+        tftdata[TFTSEC_FAV_BOT].color = TFT_GREENYELLOW;
+        s = NULL;  
+      break;
+    case BOTTOMLINE_NO_GENRES:
+        tftdata[TFTSEC_FAV_BOT].color = YELLOW;
+        strcpy(buf, "No Genres loaded!");
+      break;
+    case BOTTOMLINE_NO_GENRES2:
+        strcpy(buf, (String("http://") + ipaddress + String("/genre.html")).c_str());
+      break;
+    case BOTTOMLINE_LIST_PRESETS:
+      tftdata[TFTSEC_FAV_BOT].color = YELLOW;
+      if (genreLoopState & GENRELOOPSTATE_DONE)
+      {
+        if (genreListId >= 0)
+        {
+          setState(BOTTOMLINE_HAVE_GENRES);
+          s = NULL;
+        }
+        else
+        {
+          s = NULL;
+          setState(BOTTOMLINE_NO_GENRES);  
+        }
+      }
+      else
+        strcpy(buf, "Wait for Genres");
+      break;
+    case BOTTOMLINE_HAVE_GENRES:
+      strcpy(buf, "<B> for Genres");
+      break;
+    case BOTTOMLINE_LIST_GENRE:
+      tftdata[TFTSEC_FAV_BOT].color = YELLOW;
+      strcpy(buf, "<A> for Presets");
+      break;  
+    default:
+      s = NULL;
+  }
+  if (s) {
+    _display = String(s);
+    _idx = 0;
+    String str = String(s).substring(0, 26);
+    tftset(TFTSEC_FAV_BOT, str);  
+    tftdata[TFTSEC_FAV_BOT].update_req = true;              
+    tftdata[TFTSEC_FAV_BOT].hidden = false;              
+    //Serial.printf("Setting Bottom line to: '%s'", s);    
+  }
+}
+
+void BottomLineStatemachine::runState(int16_t stateNb){
+    //Serial.printf("StateNb: %d, GenreId: %d, LastGenre: %d\r\n", stateNb, genreId, _lastGenre);
+    /*
+    if ((genreId == 0) && (stateNb != BOTTOMLINE_NORMAL))
+      setState(BOTTOMLINE_NORMAL);
+    else if ((genreId != 0) && (_lastGenre != 0) && (_lastGenre != genreId))
+      setState(BOTTOMLINE_GENRE_CHANGE);
+    else
+    */ 
+      switch(stateNb) 
+      {
+        case BOTTOMLINE_NORMAL:
+          break;
+        case BOTTOMLINE_GENRE_START:
+          if (getStateTime() > 3000)
+            setState(BOTTOMLINE_GENRE_SECOND);
+          break;
+        case BOTTOMLINE_GENRE_CHANGE:
+          setState(BOTTOMLINE_GENRE_START);
+          break;
+        case BOTTOMLINE_GENRE_SECOND:
+          if (_display.length() > 25)
+            if (getStateTime() > 500)
+              {
+                _idx = (_idx + 1) % _display.length();            
+                String s = _display.substring(_idx, _idx + 26);
+                if (s.length() < 26)
+                  s = s + _display.substring(0, 26 - s.length()); 
+                tftset(TFTSEC_FAV_BOT, s);  
+                resetStateTime();
+              }
+          break;
+        case BOTTOMLINE_LIST_PRESETS:
+          break;
+        case BOTTOMLINE_LIST_GENRE:
+          break;
+        case BOTTOMLINE_NO_GENRES:
+          if (getStateTime() > 1000)
+            setState(BOTTOMLINE_NO_GENRES2);
+          break;
+        case BOTTOMLINE_NO_GENRES2:
+          if (getStateTime() > 500)
+            {
+                _idx = (_idx + 1) % _display.length();            
+                String s = _display.substring(_idx, _idx + 26);
+                if (s.length() < 26)
+                  setState(BOTTOMLINE_NO_GENRES3);
+                else
+                {
+                  tftset(TFTSEC_FAV_BOT, s);  
+                  resetStateTime();
+                }
+            }
+          break;
+        case BOTTOMLINE_NO_GENRES3:
+          if (getStateTime() > 1000)
+            if (-1 == genreListId)
+              setState(BOTTOMLINE_NO_GENRES);
+            else
+              setState(BOTTOMLINE_HAVE_GENRES);
+          break;
+        case BOTTOMLINE_HAVE_GENRES:
+          if (getStateTime() > 2000)
+            setState(BOTTOMLINE_NO_GENRES2);
+          break;  
+        default:
+          setState(BOTTOMLINE_NORMAL);
+          break;  
+      }
+};
+
 
 
 // startup.html file in raw data format for PROGMEM
@@ -2517,3 +3082,752 @@ const uint16_t spectrumAnalyzerPlugin[1000] = { /* Compressed plugin */
   0x0980, 0x2000, 0x0000, 0x6010, 0x0024, 0x000a, 0x0001, 0x0d00
 };
 
+
+#define BASE64PRINTER_BUFSIZE       1500        // multiple of 3!!!!
+
+class Base64Printer: public Print {
+public:  
+  Base64Printer(Print& myPrinter) : _myPrinter(myPrinter), _step(0) {
+  };
+
+  ~Base64Printer() {
+    done();
+  }
+
+  void done() {
+    if (_step !=0 )
+    {
+      size_t l = Base64.encodedLength(_step);
+      uint8_t encodedString[l];
+      Base64.encode((char *)encodedString, (char *)_buf, _step);
+      _myPrinter.write(encodedString, l);
+      _step=0;
+    }
+  };
+
+  size_t write(uint8_t byte) {
+    //Serial.write(byte);
+    _buf[_step++] = byte;
+    if (_step == BASE64PRINTER_BUFSIZE) {
+      size_t l = Base64.encodedLength(BASE64PRINTER_BUFSIZE);
+      uint8_t encodedString[l];
+      Base64.encode((char *)encodedString, (char *)_buf, BASE64PRINTER_BUFSIZE);
+      _myPrinter.write(encodedString, l);
+      _step = 0;
+    }
+    return 1;
+  };
+
+protected:
+  Print& _myPrinter;  
+  static const int bufsize;
+  uint8_t _buf[BASE64PRINTER_BUFSIZE];
+  uint16_t _step;
+};
+
+
+
+String urlDecode(String &SRC) {
+    String ret;
+    //char ch;
+    int i, ii;
+    for (i=0; i<SRC.length(); i++) {
+        if (SRC.c_str()[i] == 37) {
+            sscanf(SRC.substring(i+1,i + 3).c_str(), "%x", &ii);
+            //ch=static_cast<char>(ii);
+            //doprint("urldecode %%%s to %d", SRC.substring(i+1,i + 3).c_str(), ii);
+            ret = ret + (char)ii;
+            i=i+2;
+        } else {
+            ret+=SRC.c_str()[i];
+        }
+    }
+    return (ret);
+}
+
+
+
+void httpHandleGenre ( String http_rqfile, String http_getcmd ) 
+{
+String sndstr = "";
+  http_getcmd = urlDecode (http_getcmd) ;
+  //doprint("Handle HTTP for %s with ?%s...", http_rqfile.c_str(), http_getcmd.substring(0,100).c_str());
+  if (http_rqfile == "genre.html")
+  {
+    sndstr = httpheader ( String ("text/html") );
+    cmdclient.println(sndstr);
+    //cmdclient.println(genre_html);
+    const char *p = genre_html;
+    int l = strlen(p);
+    while ( l )                                       // Loop through the output page
+    {
+      if ( l <= 1024 )                              // Near the end?
+      {
+        cmdclient.write ( p, l ) ;                    // Yes, send last part
+        l = 0 ;
+      }
+      else
+      {
+        cmdclient.write ( p, 1024 ) ;         // Send part of the page
+        p += 1024 ;                           // Update startpoint and rest of bytes
+        l -= 1024 ;
+      }
+    }
+    cmdclient.println("\r\n");                        // Double empty to end the send body
+  }
+  else if (http_rqfile == "genredir")
+  {
+    Base64Printer base64Stream(cmdclient);
+    genres.dbgprint("Sending directory of loaded genres to client");
+    sndstr = httpheader ( String ("text/json") ) ;
+    cmdclient.print(sndstr);
+    //dirGenre (&cmdclient, true) ;
+    //genres.lsJson(cmdclient);
+    genres.lsJson(base64Stream);
+    base64Stream.done();
+    cmdclient.println("\r\n\r\n");                        // Double empty to end the send body
+  }
+  else if (http_rqfile == "genre")
+  {
+    int genreId = http_getcmd.toInt();
+    //bool dummy;
+    http_rqfile = String("--id ") + genreId;
+    genres.dbgprint("Genre switch by http:...%s (id: %d)", http_rqfile.c_str(), genreId);
+    if (genreId > 0)
+      doGenre("genre", http_rqfile);
+    sndstr = httpheader("text/html") + "OK\r\n\r\n";
+    cmdclient.println(sndstr);
+  }
+  else if (http_rqfile == "genreaction")
+  {
+    sndstr = httpheader ( String ("text/text")) ;
+    cmdclient.println(sndstr);
+    
+    int decodedLength = Base64.decodedLength((char *)http_getcmd.c_str(), http_getcmd.length());
+    char decodedString[decodedLength];
+    Base64.decode(decodedString, (char *)http_getcmd.c_str(), http_getcmd.length());
+    http_getcmd = String(decodedString);
+    genres.dbgprint("Running HTTP-genreaction with: '%s'%s", 
+      http_getcmd.substring(0, 100).c_str(), (http_getcmd.length() > 100?"...":""));
+    //Serial.print("Decoded string is:\t");Serial.println(decodedString);    
+    
+
+    String command = split(http_getcmd, '|');
+    String genre, idStr;
+    int idx = command.indexOf("genre=");
+    if (idx >= 0) 
+    {
+      String dummy = command.substring(idx + 6);
+      genre = split(dummy, ',');
+      genre.trim();
+    }
+    if (command.startsWith("link="))
+    {
+      sndstr = "OK";
+    }    
+    else if (/*command.startsWith("link") || */command.startsWith("link64="))
+    {
+      String dummy = command.substring(7);
+      idStr = split(dummy, ',');
+      idStr.trim();
+      int genreId = idStr.toInt();
+      //int genreId = searchGenre(genre.c_str());
+      if (0 == genreId)
+      {
+        sndstr =  "ERR: Could not load genre '" + genre + "' to get links...";
+      }
+      else
+      {
+        /*
+        char key[30];
+        sprintf(key, "%d_x", genreId);
+        sndstr = gnvsgetstr(key) + "\r\n\r\n"; */
+        sndstr = genres.getLinks(genreId);// + "\r\n\r\n";
+        //doprint("GenreLinkResult: %s", sndstr.c_str());
+      }
+      if (command.startsWith("link64"))
+      {
+        int encodedLength = Base64.encodedLength(sndstr.length() + 1);        
+        char encodedString[encodedLength];
+        Base64.encode(encodedString, (char *)sndstr.c_str(), sndstr.length());
+        sndstr = String(encodedString);// + "\r\n\r\n";
+      }  
+    }
+    else if (command.startsWith("createwithlinks"))
+    {
+      int genreId;
+      if ((genreId =genres.createGenre(genre.c_str())))
+      {
+        genres.dbgprint("Created genre '%s', Id=%d, links given with len=%d (%s)",
+                genre.c_str(), genreId, http_getcmd.length(), http_getcmd.c_str());
+        genres.addLinks(genreId, http_getcmd.c_str());
+      }
+      else
+        genres.dbgprint("Error: could not create genre '%s' (HTTP: createwithlinks", genre.c_str());
+    }
+    else if (command.startsWith("nvsgenres"))
+    {
+      sndstr = nvsgetstr("$$genres");
+      chomp(sndstr);
+      int encodedLength = Base64.encodedLength(sndstr.length() + 1);        
+      char encodedString[encodedLength];
+      Base64.encode(encodedString, (char *)sndstr.c_str(), sndstr.length());
+      sndstr = String(encodedString);// + "\r\n\r\n";
+    }
+    else if (command.startsWith("del=") /*|| (command.startsWith("clr="))*/)
+    {
+      String dummy = command.substring(4);
+      idStr = split(dummy, ',');
+      idStr.trim();
+      //bool deleteLinks = command.c_str() [0] == 'd' ;
+      genres.dbgprint("HTTP is about to delete genre '%s' with id %d", genre.c_str(), idStr.toInt());
+      //doDelete(idStr.toInt(), genre, deleteLinks, sndstr);
+      genres.deleteGenre(idStr.toInt());
+      //delay(2000);
+      sndstr = "Delete done, result is:"  + sndstr;
+      genres.dbgprint(sndstr.c_str());
+      sndstr = "OK";//\r\n\r\n";
+    }
+    else if (command.startsWith("save=") || (command.startsWith("add=")))
+    {
+      int genreId;
+      bool isAdd = command.startsWith("add=");
+      bool isStart = false;
+      const char *s;
+      String dummy = command.substring(isAdd?4:5);
+      idStr = split(dummy, ',');
+      idStr.trim();
+      int count=-1;int idx = -1;
+      s = strstr(command.c_str(), "count=");
+      if (s)
+        count = atoi(s + 6);
+      s = strstr(command.c_str(), "idx=");
+      if (s)
+        idx = atoi(s + 4);
+      s = strstr(command.c_str(), "start=");
+      if (s)
+        isStart = atoi(s + 6);
+      if (isStart)
+      {
+        if (0 < (genreId = genres.findGenre(genre.c_str())))
+        {
+            if (isAdd) 
+            {
+              if (genres.count(genreId) == 0)
+              {
+                genres.createGenre(genre.c_str(), true);
+                genres.dbgprint("First deleting genre: '%s' (also deleting links=%d)", genre.c_str(), 1);
+              }
+            }
+            else
+            {
+              genres.dbgprint("First deleting genre: '%s' (also deleting links=%d)", genre.c_str(), idStr == "undefined");
+              genres.createGenre(genre.c_str(), idStr == "undefined");
+            }
+        }
+        else
+        {
+            genres.dbgprint("Creating empty genre: '%s'.", genre.c_str());
+            genres.createGenre(genre.c_str());
+        }
+      }
+      genreId = genres.findGenre(genre.c_str());
+      sndstr = "OK";//\r\n\r\n";
+      if (genreId)
+      {
+        bool fail = false;
+        if (isAdd && (idx == 0))                  // possibly a new subgenre to add to the main genre?
+          if (!isStart || (genre != idStr))       // special case: genre name is identical to first subgenre
+            if (!canAddGenreToGenreId(idStr, genreId))
+            {
+              sndstr = "Error: can not add genre " + idStr + " to genre " + genre ;
+              genres.dbgprint(sndstr.c_str());
+              //sndstr = sndstr + "\r\n\r\n";
+              fail = true;
+            }
+        if (!fail)
+        {
+          genres.dbgprint("Adding %d presets to genre '%s'.", count, genre.c_str());
+          genres.addChunk(genreId, http_getcmd.c_str(), '|');
+        }  
+      } // if genreId
+      else
+      {
+        sndstr = "Error: genre " + genre + " not found in Flash!";
+        genres.dbgprint(sndstr.c_str());
+        //sndstr = sndstr + "\r\n\r\n";
+      }
+    }
+    else if (command.startsWith("setconfig="))
+    {
+      DynamicJsonDocument doc(JSON_OBJECT_SIZE(20));
+      DeserializationError err = deserializeJson(doc, command.c_str() + strlen("setconfig="));
+      if (err == DeserializationError::Ok)
+      {
+        const char* path = doc["path"];
+        const char* rdbs = doc["rdbs"];
+        int noname = doc["noname"];
+        int verbose = doc["verbose"];
+        int showid = doc["showid"];
+        int save = doc["save"];
+        doGenreConfig("verbose", String(verbose));
+        doGenreConfig("rdbs", String(rdbs));
+        doGenreConfig("path", String(path));
+        doGenreConfig("noname", String(noname));
+        doGenreConfig("showid", String(showid));
+        if (save)
+          genres.config.toNVS();
+      }
+    }
+    else
+    {
+      sndstr = "Unknown genre action '" + command + "'\r\n\r\n";
+    }
+    if (sndstr.lastIndexOf("\r\n\r\n") < 0)
+      sndstr += "\r\n\r\n";
+    if (sndstr.length() > 0) 
+    {
+        genres.dbgprint("CMDCLIENT>>%s", sndstr.substring(0,500).c_str());
+        cmdclient.println(sndstr);
+        cmdclient.flush();
+        //delay(20);
+    }
+    //nvs_commit(gnvshandle);
+  }
+  else if (http_rqfile == "genrelist" )
+  {
+    Base64Printer base64Stream(cmdclient);
+    genres.dbgprint("Sending directory of loaded genres to (remote) client");
+    sndstr = httpheader ( String ("application/json") ) ;
+    cmdclient.print(sndstr);
+    //dirGenre (&cmdclient, true) ;
+    //genres.lsJson(cmdclient);
+    genres.lsJson(base64Stream, LSMODE_SHORT|LSMODE_WITHLINKS);
+    base64Stream.done();
+    cmdclient.println("\r\n\r\n");                        // Double empty to end the send body
+  }
+  else if (http_rqfile == "genreconfig")
+  {
+    sndstr = httpheader ( String ("application/json") ) ;
+    cmdclient.print(sndstr);
+    sndstr = genres.config.asJson();
+    genres.dbgprint("Sending config: '%s'", sndstr.c_str());
+    cmdclient.println(sndstr);
+    cmdclient.println("\r\n\r\n");                        // Double empty to end the send body
+  }
+  else if (http_rqfile == "genreformat")
+  {
+    sndstr = httpheader ( String ("text/text") );
+    cmdclient.println(sndstr);
+
+    cmdclient.println("OK\r\n");
+    if (genres.format(true))
+      cmdclient.println("OK: LITTLEFS formatted for genre info");
+    else
+      cmdclient.println("Error: could not format LITTLEFS for genre info.");
+    cmdclient.println();
+    cmdclient.println();
+  }
+  else
+  {
+    sndstr = httpheader ( String ("text/text") );
+    cmdclient.println(sndstr);
+    cmdclient.printf("Unknown file?command request with %s?%s.\r\n\r\n\r\n", 
+                        http_rqfile.c_str(), http_getcmd.c_str());                        // Double empty to end the send body
+  }
+  cmdclient.stop();
+}
+
+
+void doGenreConfig(String param, String value)
+{
+  bool ret = true;
+  if (param == "rdbs")
+    genres.config.rdbs(value.c_str());
+//  else if (param == "noname")
+//    genres.config.noName(value.toInt());
+  else if (param == "showid")
+    genres.config.showId(value.toInt());
+  else if (param == "verbose")
+    genres.config.verbose(value.toInt());
+//  else if (param == "usesd")
+//    genres.config.useSD(value.toInt());
+//  else if (param == "path")
+//    genres.nameSpace(value.c_str());
+  else if (param == "store")
+    genres.config.toNVS();
+  else if (param == "info")
+    genres.config.info();
+  else
+    ret = false;
+  if (!ret)
+    genres.dbgprint("Unknown genre config parameter '%s', ignored!", param.c_str());
+}
+
+void doGenre(String param, String value)
+{
+  
+  if (value.startsWith("--")) 
+  {
+    //static bool gverbosestore;
+    const char *s = value.c_str() + 2;
+    const char *remainder = strchr(s, ' ');
+    if (remainder) 
+    {
+      param = String(s).substring(0, remainder - s) ;
+      remainder++;
+      value = String(remainder);
+      chomp(value);
+    }
+    else
+    {
+      value = "";
+      param = String(s);
+    }
+      genres.dbgprint("Genre controlCommand --%s ('%s')",
+        param.c_str(), value.c_str());
+    if (param == "id")
+    {
+      if (isdigit(value.c_str()[0]))
+        playGenre(value.toInt());
+      genres.dbgprint("Current genre id is: %d", genreId);
+    }
+    else if (param == "preset")
+    {    
+      doGpreset ( value );
+    }
+    else if (param.startsWith("verb"))
+    {
+      if (isdigit(value.c_str()[0]))
+        genres.config.verbose(value.toInt());//gverbose = value.toInt();
+      genres.dbgprint("is in verbose-mode.");
+    }
+    else if (param == "stop")
+    {
+      playGenre(0);
+      genres.dbgprint("stop playing from genre requested.");
+    } 
+    else if (param == "deleteall")
+    {
+      genres.deleteAll();
+    }
+    else if (param == "create")
+    {
+      genres.createGenre(value.c_str());
+    }
+    else if (param == "delete")
+    {
+      genres.deleteGenre(value.toInt());
+    }
+    else if (param == "find")
+    {
+      int id = genres.findGenre(value.c_str());
+      genres.dbgprint("Genre '%s'=%d", value.c_str(), id);
+    }
+    else if (param == "format")
+    {
+      genres.format(value.toInt());
+    }
+    /*
+    else if (param == "add")
+    {
+      char *s = strchr(value.c_str(), ',');
+      if (s)
+        s = s+1;
+      genres.add(value.toInt(), s);
+    }
+    */
+    else if (param == "count")
+    {
+      int ivalue = value.toInt();
+      genres.dbgprint("Number urls in Genre with id=%d is: %d", ivalue, genres.count(ivalue));
+    }
+    else if (param == "fill")
+    {
+      for (int i = 0;i < 1000;i++)
+      {
+        char key[50];
+        sprintf(key, "genre%d", i);
+        genres.createGenre(key);
+      }
+    }
+    else if (param == "url")
+    {
+      uint16_t nb;
+      char *s = strchr(value.c_str(), ',');
+      if (s)
+        nb = atoi(s+1);
+      else
+        nb = 0;
+      genres.dbgprint("URL[%d] of genre with id=%d is '%s'", nb, value.toInt(), genres.getUrl(value.toInt(), nb).c_str());
+    }
+    else if (param == "addchunk")
+    {
+      const char *s = value.c_str();
+      int id;
+      if (1 == sscanf(s, "%d", &id))
+      {
+        int idx = strspn(s, "1234567890");
+        if ((idx > 0) && (s[idx] != 0))
+        {
+            genres.dbgprint("AddChunk '%s' to genre=%d, delimiter='%c'", s + idx + 1, id, s[idx]);
+            genres.addChunk(id, s + idx + 1, s[idx]);
+        }
+      }
+    }
+    else if (param == "ls")
+    {
+      genres.ls();
+    }
+    else if (param == "lsjson")
+    {
+      //const char *s = param.c_str() + 6;
+      genres.dbgprint("List genres as JSON, full=%d", value.toInt());
+      genres.lsJson(Serial, value.toInt());
+    }
+    else if (param == "test")
+    {
+      genres.test();
+    }
+  }
+  else
+  {
+    if (value.length() == 0) 
+    {
+      doGenre("genre", "--stop");
+    }
+    else
+    {
+      int id = searchGenre(value.c_str());
+      if (id)
+        playGenre(id);
+      else
+      {
+        genres.dbgprint ("Error: Genre '%s' is not known.", value.c_str()) ;
+      }
+    }
+  }
+  // else   gnvsTaskList.push(new GnvsTask(value.c_str(), GNVS_TASK_OPEN));
+  return;
+
+}
+
+int searchGenre(const char * name)
+{
+  int ret = genres.findGenre(name);
+  if (ret > 0)
+  {
+    if (genres.count(ret) == 0)
+      ret = 0;
+  }
+  else
+    ret = 0;
+  return ret;
+}
+
+
+
+bool playGenre(int id)
+{
+  if (0 == id)
+  {
+    /*
+    if (genreId != 0)
+    {
+      char s[30];
+      sprintf(s, "Favorites: %c%c", 'A' + (favoriteGroup / FAVORITE_BANKS), '1' + (favoriteGroup % FAVORITE_BANKS));
+      tftset(TFTSEC_FAV_BOT, s);       
+    }
+    */
+    genreId = genrePresets = genrePreset = genreChannelOffset = 0;
+    genres.dbgprint("Genre playmode is stopped");
+    return true;
+  }
+
+  int numStations = genres.count(id);
+  char cmd[50];
+  if (numStations == 0)
+    return false;
+  
+  genreId = id;
+  genrePresets = numStations ;
+  genreChannelOffset = genrePreset = random(genrePresets) ;
+  if (genreSelected)
+    free(genreSelected);
+  genreSelected = NULL;
+  genreSelected = strdup(genres.getName(id).c_str());
+//  :::genreListId
+  genres.dbgprint("Active genre is now: '%s' (id: %d), random start gpreset=%d (of %d)",
+        genres.getName(id).c_str(), id, genrePreset, genrePresets);
+//  sprintf(cmd, "Genre has %d stations", numStations);      
+//  tftset(TFTSEC_FAV_BOT, cmd);
+  //currentpreset = ini_block.newpreset = -1;
+  sprintf(cmd, "gpreset=%d", genrePreset);
+  bottomLineStatemachine.setState(BOTTOMLINE_GENRE_START);
+  analyzeCmd(cmd);
+  return true;
+}
+
+
+//**************************************************************************************************
+//                                S P L I T                                                        *
+//**************************************************************************************************
+// Splits the input String value at the delimiter identified by parameter delim.                   *
+//  - Returns left part of the string, chomped                                                     *
+//  - Input String will contain the remaining part after delimiter (not altered)                   *
+//  - will return the input string if delimiter is not found
+//**************************************************************************************************
+String split(String& value, char delim) {
+  int idx = value.indexOf(delim);
+  String ret = value;
+  if (idx < 0) {
+    value = "";
+  } else {
+    ret = ret.substring(0, idx);
+    value = value.substring(idx + 1);
+  }
+  chomp(ret);
+  return ret;
+}
+
+void doGpreset(String value)
+{
+  int ivalue = value.toInt();
+  if (genreId != 0) 
+  {
+    if (ivalue >= genrePresets)
+      ivalue = ivalue - genrePresets * (ivalue / genrePresets) ;
+    else if (ivalue < 0)
+      ivalue = ivalue + genrePresets * (1 + (-ivalue - 1) / genrePresets) ;
+
+    if (ivalue < genrePresets) 
+    {
+      char key[20];
+      String s, s1;
+      int idx;
+      sprintf(key, "%d_%d", genreId, ivalue);
+      genrePreset = ivalue;
+      //s = gnvsgetstr(key);
+      s = genres.getUrl(genreId, ivalue, false);
+      idx = s.indexOf('#');
+      if (idx >= 0)
+      {
+        s1 = s.substring(idx + 1);
+        s = s.substring(0, idx);
+      }
+      {
+        if (idx >= 0)
+        {
+          genres.dbgprint("Switch to GenreUrl: '%s', Station name is: '%s'", s.c_str(), s1.c_str());
+          genreStation = s1;
+        }
+        else
+          {
+          genres.dbgprint("Switch to GenreUrl: '%s', Station name is not on file!", s.c_str());
+          genreStation = s;
+          }
+        tftset(TFTSEC_TXT, genreStation);
+        genreStation = genreStation.substring(0, 42);
+        tftset(TFTSEC_VOL, genreStation);
+        tftset(TFTSEC_BOT, genreStation);
+        tftdata[TFTSEC_VOL].hidden = false;
+      }
+      if (s.length() > 0)
+      {
+        char cmd[s.length() + 10];
+        sprintf(cmd, "station=%s", s.c_str());
+        ini_block.newpreset = currentpreset;
+        analyzeCmd(cmd);
+//        host = s;
+//        connecttohost();
+      }
+      else
+      {
+        genres.dbgprint("BUMMER: url not on file");
+
+      }
+    }
+    else
+    {
+      genres.dbgprint("Id %d is not in genre:presets(%d)", ivalue);
+    }
+  }
+  else
+  {
+    dbgprint("BUMMER: genrePreset is called but no genre is selected!");
+  }
+}
+
+bool canAddGenreToGenreId(String idStr, int genreId)
+{
+  String knownLinks = genres.getLinks(genreId);
+  if (knownLinks.length() == 0)
+  {
+    genres.addLinks(genreId, idStr.c_str());
+    return true;
+  }  
+  do {
+    if (idStr == split(knownLinks, ','))
+      return false;
+  } while (knownLinks.length() > 0);
+  genres.addLinks(genreId, idStr.c_str());
+  return true;
+}
+
+void genreLoop(bool reset)
+{
+  if (reset)
+  {
+    genreLoopState = GENRELOOPSTATE_INIT;
+    if (genreListBuffer)
+    {
+      free(genreListBuffer);
+      genreListBuffer = NULL;
+    }
+    genreList.clear();
+    genreListId = -1;
+  } 
+  else if (0 == (genreLoopState & GENRELOOPSTATE_DONE)) {
+    if (GENRELOOPSTATE_INIT == genreLoopState)
+    {
+      if (genres.cacheStep()) 
+      {
+        String list = genres.playList();
+        if (list.length() >= 0)
+        {
+          genreListBuffer = (char *)genres.gmalloc(list.length() + 1, true);
+          if (genreListBuffer)
+          {
+            char *p = genreListBuffer;
+            memcpy(p, list.c_str(), list.length() + 1);
+            while(p)
+            {
+              char *p1 = strchr(p, ',');
+              if (p1)
+              {
+                *p1 = 0;
+                p1++;
+              }
+              genreList.insert(p);
+              //genres.dbgprint("genreList[%d]=%s", genreList.size(), p);
+              p = p1;
+            }
+          }
+        }
+        genreLoopState = GENRELOOPSTATE_DONE;      
+        genres.dbgprint("Have found %d genres", genreList.size());
+
+        for(int i = 0;i < genreList.size();i++)
+        {
+          std::set<const char*>::iterator it = genreList.begin();
+          std::advance(it, i);
+          genres.dbgprint("Genre[%d]='%s'", i, *it);
+        }
+        if (genreList.size())
+          genreListId = 0;
+        else
+          genreListId = -1;
+      }
+    }
+  }
+}
