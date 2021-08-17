@@ -214,7 +214,7 @@ The Web interface can hande extended unicode characters. The only thing thats no
 On the Odroid display special Unicode characters can not be displayed properly. The result shortened (or empty) list entries on the Odroid display,
 that can be selected correctly nnonetheless. The same applies to station names including unicode characters.
 
-![Web API for genre](pics/genreunicode.jpg?raw=true "Unicode is fine (but not for ODROID display")
+![Web API for genre](pics/genre6.jpg?raw=true "Unicode is fine (but not for ODROID display")
 
 
 ### Using genre playlists
