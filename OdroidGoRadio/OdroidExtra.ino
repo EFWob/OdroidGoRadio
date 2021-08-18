@@ -101,6 +101,14 @@ int listSelectedPreset = 0;
 
 struct cstrless {
     bool operator()(const char* a, const char* b) {
+      if ((*a >= 'A') && (*a <= 'Z'))
+      {
+        if ((*b != 0) && !((*b >= 'A') && (*b <= 'Z')))
+          return true;
+      }
+      else if ((*b >= 'A') && (*b <= 'Z'))
+        if (*a)
+          return false;
       return strcmp(a, b) < 0;
     }
 };
@@ -2091,7 +2099,17 @@ int16_t iniVolume;
 // setup initial volume
   if (0 == step) {
     dsp_println("Try to load Genres.");
-    genres.begin();
+    if (!genres.begin(false))
+    {
+      dsp_print("Failed, try to format LITTLEFS...");
+      if (genres.begin(true))
+        dsp_println("OK");
+      else
+      {
+        dsp_println("FAIL!!");
+        delay(3000);
+      }
+    }
     iniVolume = odroidRadioConfig.volume.useStart?odroidRadioConfig.volume.start:ini_block.reqvol; 
     if (iniVolume >= odroidRadioConfig.volume.max)
       iniVolume = odroidRadioConfig.volume.max;
@@ -3283,6 +3301,7 @@ String sndstr = "";
       genres.dbgprint("HTTP is about to delete genre '%s' with id %d", genre.c_str(), idStr.toInt());
       //doDelete(idStr.toInt(), genre, deleteLinks, sndstr);
       genres.deleteGenre(idStr.toInt());
+      genreLoop(true);
       //delay(2000);
       sndstr = "Delete done, result is:"  + sndstr;
       genres.dbgprint(sndstr.c_str());
@@ -3345,6 +3364,8 @@ String sndstr = "";
               //sndstr = sndstr + "\r\n\r\n";
               fail = true;
             }
+            else
+              genreLoop(true);
         if (!fail)
         {
           genres.dbgprint("Adding %d presets to genre '%s'.", count, genre.c_str());
@@ -3817,12 +3838,14 @@ void genreLoop(bool reset)
         genreLoopState = GENRELOOPSTATE_DONE;      
         genres.dbgprint("Have found %d genres", genreList.size());
 
+        /*
         for(int i = 0;i < genreList.size();i++)
         {
           std::set<const char*>::iterator it = genreList.begin();
           std::advance(it, i);
           genres.dbgprint("Genre[%d]='%s'", i, *it);
         }
+        */
         if (genreList.size())
           genreListId = 0;
         else

@@ -5687,7 +5687,7 @@ void displayinfo ( uint16_t inx )
       dsp_setCursor ( x, p->y ) ;                          // Prepare to show the info
       dsp_println ( buf ) ;                                // Show the string
     }
-    dbgprint("Print tftsec[%d]=\"%s\"", inx, buf);
+    // dbgprint("Print tftsec[%d]=\"%s\"", inx, buf);
   }
 
 #else

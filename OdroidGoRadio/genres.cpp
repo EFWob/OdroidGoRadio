@@ -141,7 +141,7 @@ void Genres::verbose ( int mode ) {
 }
 */
 
-bool Genres::begin() {
+bool Genres::begin(bool formatOnFail) {
     _wasBegun = true;
     if (_begun)                 // Already open?
         return true;
@@ -155,12 +155,13 @@ bool Genres::begin() {
     {
         if (!(_begun = LITTLEFS.begin()))
             {
-            if (!(_begun = this->format()))
+            if (formatOnFail)
+              if (!(_begun = this->format()))
                 {
                 dbgprint("LITTLEFS formatting failed! Can not play from genres!");
                 }
              }
-        else
+        if (_begun)
             _begun = openGenreIndex();
     }
     else    
@@ -865,7 +866,7 @@ const char *fname;
         if (_idx[id-1].count != 0xffff)
         {
             res = _idx[id - 1].count;
-            dbgprint("Got count for id: %d from cached idx-File as: %d (CacheIdx=%d)", id, res, _cacheIdx);
+            //dbgprint("Got count for id: %d from cached idx-File as: %d (CacheIdx=%d)", id, res, _cacheIdx);
         }
         else
         {
@@ -888,13 +889,13 @@ const char *fname;
                 _idx[id - 1].count = res;
             else
                 res = _idx[id - 1].count = 0xfffe;
-            dbgprint("Calculated count for id: %d as: %d", id, res);
+            //dbgprint("Calculated count for id: %d as: %d", id, res);
 
         }
     //force writeout of index file
       if (_cacheIdx == id - 1)
       {
-        dbgprint("CacheIDX=%d is id-1, KnownGenres = %d", _cacheIdx, _knownGenres);
+        //dbgprint("CacheIDX=%d is id-1, KnownGenres = %d", _cacheIdx, _knownGenres);
         _cacheIdx = id;
         if (id == _knownGenres)
         {

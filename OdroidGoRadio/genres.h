@@ -49,7 +49,7 @@ friend class GenreConfig;
         Genres(const char* name = NULL);
         ~Genres();
         void nameSpace(const char *name);
-        bool begin();
+        bool begin(bool formatOnFail = true);
         int findGenre(const char *s);
         int createGenre(const char *s, bool deleteLinks = true);
         bool deleteGenre(int id);
