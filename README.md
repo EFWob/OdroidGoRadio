@@ -248,23 +248,49 @@ by pressing (A) while the genre selection list is shown.
 
 #### Configuring anything around genres
 
-To configure genre settings use the command 
+The genre settings can be configured using the web-interface (after pressing the **"Edit Settings"** button at the bottom of the website) or the
+Serial command interface. 
 
+
+To configure genre settings from Serial command interface, use the command 
 **_gcfg.subcommand=value_**
 
 The command can be used from command line or from the preference settings in NVS. If not set in the preferences (NVS) all settings are set to the defaults described below.
 
 The following commands (including subcommands) are defined:
 
-- **_gcfg.host=hostURL_** Set the host to RDBS. **Defaults to 'de1.api.radio-browser.info'** if not set. 'de', 'nl', 'fr' can be used (as short cuts) to address 'de1.api.radio-browser.info', 'nl1.api.radio-browser.info' or 'fr1.api.radio-browser.info' respectively. Otherwise full server name must be given.
+- **_gcfg.disable=0|1_** Disable genre on the Odroid API. **Defaults to _0_**. If set, genre list can not be accessed from the preset list. 
+  Does not stop playing from genre station, if genre is already active when setting to _1_. Genres can also still be played from website or from
+  Serial command interface.	
+
+- **_gcfg.hostrdbs=hostURL_** Set the host to RDBS. **Defaults to 'de1.api.radio-browser.info'** if not set. 'de', 'nl', 'fr' can be used (as short cuts) to address 'de1.api.radio-browser.info', 'nl1.api.radio-browser.info' or 'fr1.api.radio-browser.info' respectively. Otherwise full server name must be given.
+
+- **_gcfg.showid=0|1_** Show the numerical ID of each genre on website. **Defaults to _0_**. The ID shown for each genre can be used to switch to
+  that genre by issuing the command _genre=--id n_, where n is the respective ID. Can be helpful for long genre names or genre names containing 
+  special characters.
+
+- **_gcfg.verbose=1|0_** Show verbose info on Serial. **Defaults to _1_**. Some information about whats going on for debugging.
+
+- **_gcfg.store_** Takes no parameter. Stores the current genre configuration settings to NVS so they will be recalled at next start of the radio.
+
+To configure genre settings from the Web-Interface, press the **"Edit Settings"** button at the bottom of the website _http://x.y.i.p/genre.html_
+
+![Web API for genre settings](pics/genre7.jpg?raw=true "Same possibilities as from Serial interface")
+
+It allows for the same settings as from Serial command interface. Pressing **"Cancel"** will abort and discard any possible changes. **"Apply"** will
+apply the current configuration settings as shown in the input fields. **"Store to NVS preferences** will apply the current configuration settings
+as shown in the input fields and will also store these settings to NVS for the next start of the radio.
 
 ### Considerations (and limitations) around using genre playlists
 
 The total number of genre lists is limited (to 1000). This is a compile time limitation that can not be changed by a command or a preference setting. 
 
-For faster access, some information is cached. For caching, PSRAM is preferred. If PSRAM is not available, normal heap is used. PSRAM should be plenty, however, if there is no sufficient heap, operation might be slower. (Use command _test_ from the Serial input. If the reported Free Memory is below 100.000, it is likely that RAM caching is not available.)
+For faster access, some information is cached. For caching, PSRAM is preferred. If PSRAM is not available, normal heap is used. PSRAM should be
+plenty, however, if there is no sufficient heap, operation might be slower. (Use command _test_ from the Serial input. If the reported Free Memory 
+is below 100.000, it is likely that RAM caching is not available.)
 
-When in genre play mode, you can still issue a _preset=n_ command and the radio will play the according preset from the preferences. However, genre playlist mode will not be stopped: the command _gpreset=n_ as well as _channel=m_ (if channellist is defined) will still operate on the current genre playlist.
+When in genre play mode, you can still issue a _preset=n_ command and the radio will play the according preset from the preferences. However, genre 
+playlist mode will not be stopped: the command _gpreset=n_ will still operate on the current genre playlist.
 
 ## MENUs
 ### General

@@ -1633,7 +1633,7 @@ void handleBtnAB(uint8_t group, bool released = false) {
   }
   if (RADIOSTATE_LIST == radioState)
   {
-   if (group == 1)
+   if ((group == 1) && !genres.config.disable())
     {
       if (-1 != genreListId)
       {
@@ -2534,21 +2534,28 @@ const char *s = (const char *)&buf;
       break;
     case BOTTOMLINE_LIST_PRESETS:
       tftdata[TFTSEC_FAV_BOT].color = YELLOW;
-      if (genreLoopState & GENRELOOPSTATE_DONE)
+      if (genres.config.disable())
+        strcpy(buf, "");
+      else
       {
-        if (genreListId >= 0)
+        if (genreLoopState & GENRELOOPSTATE_DONE)
         {
-          setState(BOTTOMLINE_HAVE_GENRES);
-          s = NULL;
+          if (genreListId >= 0)
+          {
+            setState(BOTTOMLINE_HAVE_GENRES);
+            s = NULL;
+          }
+          else
+          {
+            s = NULL;
+            setState(BOTTOMLINE_NO_GENRES);  
+          }
         }
         else
-        {
-          s = NULL;
-          setState(BOTTOMLINE_NO_GENRES);  
+          strcpy(buf, "Wait for Genres");
+        
         }
-      }
-      else
-        strcpy(buf, "Wait for Genres");
+      
       break;
     case BOTTOMLINE_HAVE_GENRES:
       strcpy(buf, "<B> for Genres");
@@ -3402,11 +3409,13 @@ String sndstr = "";
         int verbose = doc["verbose"];
         int showid = doc["showid"];
         int save = doc["save"];
+        int disable = doc["disable"];
         doGenreConfig("verbose", String(verbose));
         doGenreConfig("rdbs", String(rdbs));
-        doGenreConfig("path", String(path));
-        doGenreConfig("noname", String(noname));
+//        doGenreConfig("path", String(path));
+//        doGenreConfig("noname", String(noname));
         doGenreConfig("showid", String(showid));
+        doGenreConfig("disable", String(disable));
         if (save)
           genres.config.toNVS();
       }
@@ -3488,6 +3497,8 @@ void doGenreConfig(String param, String value)
 //    genres.nameSpace(value.c_str());
   else if (param == "store")
     genres.config.toNVS();
+  else if (param == "disable")
+    genres.config.disable(value.toInt());
   else if (param == "info")
     genres.config.info();
   else
@@ -3793,6 +3804,9 @@ void doGpreset(String value)
     dbgprint("BUMMER: genrePreset is called but no genre is selected!");
   }
 }
+
+
+
 
 bool canAddGenreToGenreId(String idStr, int genreId)
 {

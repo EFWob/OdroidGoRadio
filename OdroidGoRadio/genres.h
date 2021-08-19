@@ -31,6 +31,8 @@ friend class Genres;
         void useSD(bool useSD); 
         void verbose(bool mode) { _verbose = mode;};
         bool verbose() { return _verbose;};
+        void disable(bool mode) {_disable = mode;};
+        bool disable() {return _disable;}; 
         void toNVS();
         void info();
         String asJson();
@@ -41,6 +43,7 @@ friend class Genres;
         bool _showId = false;
         bool _verbose = true;
         bool _useSD = false;
+        bool _disable = false;
 };
 
 class Genres {

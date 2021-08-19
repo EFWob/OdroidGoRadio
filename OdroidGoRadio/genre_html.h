@@ -105,6 +105,15 @@ const char genre_html[] PROGMEM = R"=====(<!DOCTYPE html>
         </tr>
         -->
         <tr>
+          <td style="text-align:right">
+            Disable Genres on Odroid API:
+          </td>
+          <td style="text-align:left">
+            <input type="checkbox" id="cfgDisable">
+          </td>
+        </tr>
+
+        <tr>
           <td colspan=2 style="text-align:center">
             <br>
             <hr>
@@ -194,6 +203,10 @@ const char genre_html[] PROGMEM = R"=====(<!DOCTYPE html>
       config.verbose = 1;
     else
       config.verbose = 0;
+    if (document.getElementById("cfgDisable").checked == true)
+      config.disable = 1;
+    else
+      config.disable = 0;
     //if (document.getElementById("cfgNoname").checked == true)
     //  config.noname = 1;
     //else
@@ -1297,6 +1310,7 @@ function decodeUnicode(str) {
       //document.getElementById("cfgNoname").checked = config.noname;
       document.getElementById("cfgShowID").checked = config.showid;      
       document.getElementById("cfgVerbose").checked = config.verbose;      
+      document.getElementById("cfgDisable").checked = config.disable;      
       document.getElementById("fsNotOpen").hidden = (config.open != 0);
       callback();
 /*

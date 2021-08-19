@@ -5452,6 +5452,10 @@ const char* analyzeCmd ( const char* par, const char* val )
   {
     doGenre ( argument, value ) ;
   }
+  else if ( argument.startsWith( "gcfg." ) )
+  {
+    doGenreConfig ( argument.substring(5), value ) ;
+  }
 #endif
   else if ( argument.indexOf ( "preset" ) >= 0 )      // (UP/DOWN)Preset station?
   {
@@ -5470,6 +5474,11 @@ const char* analyzeCmd ( const char* par, const char* val )
     }
     else
     {
+#if defined(ARDUINO_ODROID_ESP32)
+extern int genreId;
+      if (0 == genreId)
+      {
+#endif
       if ( relative )                                 // Relative argument?
       {
         ini_block.newpreset += ivalue ;               // Yes, adjust currentpreset
@@ -5483,6 +5492,9 @@ const char* analyzeCmd ( const char* par, const char* val )
       currentpreset = -1 ;                            // Make sure current is different
       sprintf ( reply, "Preset is now %d",            // Reply new preset
                 ini_block.newpreset ) ;
+#if defined(ARDUINO_ODROID_ESP32)
+    }
+#endif 
     }
   }
   else if ( argument == "stop" )                      // (un)Stop requested?

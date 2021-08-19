@@ -25,6 +25,7 @@ String GenreConfig::asJson() {
               ",\"noname\": " + String(_noName?1:0) +
               ",\"showid\": " + String(_showId?1:0) +
               ",\"verbose\": " + String(_verbose?1:0) +
+              ",\"disable\":" + String(_disable?1:0) +
               ",\"isSD\":" + String(_genres->_isSD?1:0) +
               ",\"path\": \"" + String(_genres->_nameSpace) + "\"" +
               ",\"open\":" + String(_genres->_begun?1:0) +
@@ -38,7 +39,8 @@ void GenreConfig::toNVS() {
     nvssetstr("gcfg.rdbs", String(_rdbs));
 //    nvssetstr("gcfg.usesd", String(_genres->_isSD?1:0));
 //    nvssetstr("gcfg.path", String(_genres->_nameSpace));
-    nvssetstr("gcfg.noname", String(_noName?1:0));
+//    nvssetstr("gcfg.noname", String(_noName?1:0));
+    nvssetstr("gcfg.disable", String(_disable?1:0));
     nvssetstr("gcfg.verbose", String(_verbose?1:0));
     nvssetstr("gcfg.showid", String(_showId?1:0));
 }
