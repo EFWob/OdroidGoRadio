@@ -206,7 +206,13 @@ Each genre name (either if coming direct from the database or a user defined clu
 from loaded genre names because they always start with an uppercase letter. You can use the same cluster name again in further database requests to add more genres into it. You cannot add the same genre twice to the same cluster, but you can add the same genre to more than one cluster.
 You cannot edit the resulting playlist any further. You can not add single station URLs "by hand", you can not delete a genre from a cluster. You can only delete the full cluster (or a whole genre).
 
-With the default partition the file system is big enough to support (estimate) between 10,000 and 12,000 stations in total. (With the radio4MB_default partition it is still somewhat in between 8,000 and 10,000). For instance the radio that I just use for debugging has a total of 3182 stations stored which consumes 360,448 of 1,114,112 bytes of the flash file system leaving more than 66 per cent free for further playlists.
+With the default partition the file system is big enough to support (estimate) between 10,000 and 12,000 stations in total. With the "Large SPIFFS" 
+partition I currently (at time of writing) have 26925 stations stored in 192 genres and still have 3.084.288 of the total 7.274.496 bytes of the
+Filesystem available (roughly 60% used). (From Serial command line, use commands _genre=--test_ and _genre=--test_ to get some insights.)
+
+The final estimate is a bit tricky, as a rule of thumb, the same number of stations will use less space if stored in less genres. So having fewer
+but bigger (with more stations each) genres is better for filesystem space usage.
+
 
 
 The Web interface can hande extended unicode characters. The only thing thats not working currently is if the genre name of the database contains the '/'-character. That I have seen on one genre so far and already forgotten again what it was, so it is currently no priority...
