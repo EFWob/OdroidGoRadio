@@ -214,7 +214,7 @@ The Web interface can hande extended unicode characters. The only thing thats no
 On the Odroid display special Unicode characters can not be displayed properly. The result shortened (or empty) list entries will show on the Odroid 
 display, that can be selected correctly nnonetheless. The same applies to station names including unicode characters.
 
-![Web API for genre](pics/genre6.jpg?raw=true "Unicode is fine (but not for ODROID display")
+![Web API for genre](pics/genre6.jpg?raw=true "Unicode is fine for Website (but not for ODROID display)")
 
 
 ### Using genre playlists
@@ -289,8 +289,8 @@ For faster access, some information is cached. For caching, PSRAM is preferred. 
 plenty, however, if there is no sufficient heap, operation might be slower. (Use command _test_ from the Serial input. If the reported Free Memory 
 is below 100.000, it is likely that RAM caching is not available.)
 
-When in genre play mode, you can still issue a _preset=n_ command and the radio will play the according preset from the preferences. However, genre 
-playlist mode will not be stopped: the command _gpreset=n_ will still operate on the current genre playlist.
+When in genre play mode, you can not use the _preset=n_ command to play a preset. To go back to the "preset-mode", you must open the Genre List
+and then press (A). 
 
 ## MENUs
 ### General
