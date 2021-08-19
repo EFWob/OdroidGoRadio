@@ -67,7 +67,7 @@ password of the Access Point are changed to "ODROIDRadio". The IP will be the sa
 	* Search for the entry wifi_00 = and set the line to wifi_00 = YourSSID/YourPassword
 	* Press buttons (Save) and (Restart) and you should be done (Observe screen output to check for success or Serial output 
 for more verbose debug information).
-* There are no available pins available for attaching functions to. Any settings in the configuration file are ignored.
+* There are no available pins for attaching functions to. Any settings in the configuration file are ignored.
 * Also the pin assignments (for VS1053) are fixed by the limitations of the header pin. Any pin settings in the config file 
 are ignored.
 * The most important settings are thus the WiFi credentials in wifi_00 (or wifi_01 etc. if you want WiFiMulti) and the 
@@ -260,7 +260,7 @@ The command can be used from command line or from the preference settings in NVS
 The following commands (including subcommands) are defined:
 
 - **_gcfg.disable=0|1_** Disable genre on the Odroid API. **Defaults to _0_**. If set, genre list can not be accessed from the preset list. 
-  Does not stop playing from genre station, if genre is already active when setting to _1_. Genres can also still be played from website or from
+  Does not stop playing from genre station, if genre is already active when set to _1_. Genres can also still be played from website or from
   Serial command interface.	
 
 - **_gcfg.hostrdbs=hostURL_** Set the host to RDBS. **Defaults to 'de1.api.radio-browser.info'** if not set. 'de', 'nl', 'fr' can be used (as short cuts) to address 'de1.api.radio-browser.info', 'nl1.api.radio-browser.info' or 'fr1.api.radio-browser.info' respectively. Otherwise full server name must be given.
@@ -349,7 +349,7 @@ is shown in addition to the station name.
 * During the move, the position indicator is updated accordingly. That allows to conveniently re-organize the favorite banks.
 * You have to confirm the changes by pressing (A). This change requires a restart of the radio (will be prompted on screen).
 
-(You can not enter new stations here. That needs to be done through the configuration webpage as usual.=
+(You can not enter new stations here. That needs to be done through the configuration webpage as usual.)
 
 ### Menu 3: Equalizer/Spectrum analyzer
 
