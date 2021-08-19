@@ -4726,6 +4726,10 @@ void mp3loop()
 void loop()
 {
   mp3loop() ;                                       // Do mp3 related actions
+#if defined(ARDUINO_ODROID_ESP32)
+    odroidLoop();
+    mp3loop();
+#endif
 
   if ( updatereq )                                  // Software update requested?
   {
@@ -4766,9 +4770,6 @@ void loop()
   handleIpPub() ;                                   // See if time to publish IP
   handleVolPub() ;                                  // See if time to publish volume
   chk_enc() ;                                       // Check rotary encoder functions
-#if defined(ARDUINO_ODROID_ESP32)
-    odroidLoop();
-#endif
 
 }
 
@@ -6002,6 +6003,12 @@ void displaytime ( const char* str, uint16_t color )
 //**************************************************************************************************
 void handle_spec()
 {
+#if defined(ARDUINO_ODROID_ESP32)
+//  extern void runSpectrumAnalyzer();
+//  runSpectrumAnalyzer();
+//  odroidLoop();
+#endif  
+
   // Do some special function if necessary
   if ( dsp_usesSPI() )                                        // Does display uses SPI?
   {
@@ -6041,10 +6048,6 @@ void handle_spec()
       displaybattery() ;                                      // Show battery charge on display
     }
   }
-#if defined(ARDUINO_ODROID_ESP32)
-//  extern void runSpectrumAnalyzer();
-//  runSpectrumAnalyzer();
-#endif  
   releaseSPI() ;                                              // Release SPI bus
   if ( mqtt_on )
   {

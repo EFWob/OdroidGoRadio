@@ -2945,22 +2945,33 @@ void runSpectrumAnalyzer() {
 
 bool SpectrumAnalyzer::readBands() {
 uint8_t bands;
+static bool readSuccess = true;
      _drawn = 0;
 //    claimSPI("spectrum");
 //  if (_valid) {
         vs1053player->write_register(SCI_WRAMADDR, _base+2);
         bands = vs1053player->read_register(SCI_WRAM);
 //        _valid = _bands == 14;
-        if (bands == _bands) {
+        if (bands <= _bands) {
 //          vs1053player->write_register(SCI_WRAMADDR, _base+1);
 //          vs1053player->write_register(SCI_WRAM, 0xffff);
           vs1053player->write_register(SCI_WRAMADDR, _base+4);
-          for (uint8_t i = 0; i < _bands; i++) {
-            _spectrum[i][0] = vs1053player->read_register(SCI_WRAM) & 0x1f;
+          int8_t skip = (_bands - bands) / 2;
+          for (int8_t i = 0; i < _bands; i++) {
+            if ((i >= skip) && (i - skip < bands ))
+              _spectrum[i][0] = vs1053player->read_register(SCI_WRAM) & 0x1f;
+            else
+            {
+              if (_spectrum[i][0])  
+                _spectrum[i][0]--;  
+            }
             _spectrum[i][3] = 0;
+            
           }
         } else {
-          dbgprint("Spectrum analyzer read failed! Bands: %d", bands);
+          if (readSuccess)
+            dbgprint("Spectrum analyzer read failed! Bands: %d", bands);
+          readSuccess = false;
           for (uint8_t i = 0; i < _bands; i++) {
             if (_spectrum[i][0])  
               _spectrum[i][0]--;  
