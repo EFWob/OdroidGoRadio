@@ -299,6 +299,9 @@ struct ini_struct
   uint8_t        reqvol ;                             // Requested volume
   uint8_t        rtone[4] ;                           // Requested bass/treble settings
   int8_t         newpreset ;                          // Requested preset
+#if defined(ARDUINO_ODROID_ESP32_OBSOLETE)
+  uint32_t       newgenrestation;                     // Requested Genre (upper 2 bytes) and station (lower 2 bytes)
+#endif
   String         clk_server ;                         // Server to be used for time of day clock
   int8_t         clk_offset ;                         // Offset in hours with respect to UTC
   int8_t         clk_dst ;                            // Number of hours shift during DST
@@ -414,6 +417,9 @@ int               bitrate ;                              // Bitrate in kb/sec
 int               mbitrate ;                             // Measured bitrate
 int               metaint = 0 ;                          // Number of databytes between metadata
 int8_t            currentpreset = -1 ;                   // Preset station playing
+#if defined(ARDUINO_ODROID_ESP32_OBSOLETE)
+uint32_t          currentgenrestation = 0 ;              // Current Genre (upper 2 bytes) and station (lower 2 bytes)
+#endif
 String            host ;                                 // The URL to connect to or file to play
 String            playlist ;                             // The URL of the specified playlist
 bool              hostreq = false ;                      // Request for new host
@@ -4634,6 +4640,24 @@ void mp3loop()
       }
     }
   }
+#if defined(ARDUINO_ODROID_ESP32_OBSOLETE)
+  if (( ini_block.newgenrestation != 0) && (ini_block.newgenrestation != currentgenrestation))
+  {
+    uint32_t genre = (ini_block.newgenrestation >> 16);
+    uint16_t gpreset = ini_block.newgenrestation & 0xffff;
+    host = genres.getUrl(genre, gpreset);
+    if (host == "")
+    {
+      ini_block.newgenrestation = currentgenrestation;
+    }
+    else
+    {
+      currentgenrestation = ini_block.newgenrestation;
+      connecttohost();
+    }
+  }
+  else
+#endif  
   if ( ini_block.newpreset != currentpreset )            // New station or next from playlist requested?
   {
     if ( datamode != STOPPED )                           // Yes, still busy?

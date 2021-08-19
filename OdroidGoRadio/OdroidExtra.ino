@@ -3757,8 +3757,12 @@ void doGpreset(String value)
       {
         char cmd[s.length() + 10];
         sprintf(cmd, "station=%s", s.c_str());
+        //ini_block.newgenrestation = genreId;
+        //ini_block.newgenrestation = (ini_block.newgenrestation << 16) + ivalue;
         ini_block.newpreset = currentpreset;
+        bottomLineStatemachine.setState(BOTTOMLINE_GENRE_START);
         analyzeCmd(cmd);
+        
 //        host = s;
 //        connecttohost();
       }

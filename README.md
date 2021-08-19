@@ -211,57 +211,42 @@ With the default partition the file system is big enough to support (estimate) b
 
 The Web interface can hande extended unicode characters. The only thing thats not working currently is if the genre name of the database contains the '/'-character. That I have seen on one genre so far and already forgotten again what it was, so it is currently no priority...
 
-On the Odroid display special Unicode characters can not be displayed properly. The result shortened (or empty) list entries on the Odroid display,
-that can be selected correctly nnonetheless. The same applies to station names including unicode characters.
+On the Odroid display special Unicode characters can not be displayed properly. The result shortened (or empty) list entries will show on the Odroid 
+display, that can be selected correctly nnonetheless. The same applies to station names including unicode characters.
 
 ![Web API for genre](pics/genre6.jpg?raw=true "Unicode is fine (but not for ODROID display")
 
 
 ### Using genre playlists
-A playlist can be selected by the command interface by using the command
-_genre=Rock_
-to play one genre playlist. If that genre exists (as a cluster in this example, but could also be a native genre name from a direct download). 
-**Remeber that genre playlist names are case sensitive.** Genres loaded from database direct will always have 
-lowercase letters only, while cluster names start with an uppercase letter (followed by only lowercase letters).
-So, _Rock_ is a valid name for a cluster, _rock_ is a valid name for a genre tag from the internet radio database,
-but constucts like _ROCK_ or _rOcK_ are invalid. When in doubt, copy the name from the web API.
+#### Selecting from the Odroid API
+The radio will always start with playing from the presets. To select a genre, enter the preset list by pressing (Up) or (Down). The preset list
+opens, allowing to scroll between the presets as usual. While within this list, press (B) and the Genre list will open (if any genres have been
+loaded). This list can be scrolled using (Up) and (Down) as usual. And as usual, you can cancel the list pressing (LEFT) or selecting a genre by 
+pressing (Right). In addition you can use (A) to switch back to the preset list.
 
-If a valid genre name has been assigned (and that genre exists in SPIFFS), the radio will start to play a random station from that genre. If the same command is issued again (with the same name), another (random) station from that genre will play.
+If a Genre has been selected, the radio will play a random preset from the selected genre. While playing from a genre, the name of the genre and
+the station number (as well as the total number of stations in the selected genre) are shown at the bottom. 
 
-You can switch to a station direct using the command 
+You can change the station with in the genre by selecting the same genre from the genre list again (another random station will play) or use the 
+buttons (1) to (4) to select a station from the current genre. The assignment to (1) and (4) can be changed by pressing (A) or (B). Basically there
+will always be 4 stations from the current genre available through buttons (1) and (4). If you press (A) you will have 4 different stations assigned
+(assumend there are at least 8 stations in that genre). If you press (A), there will be for more and so on. If you press (B) you will get back to
+the 4 stations that have been assigned before and so on. In either (A) or (B) direction the assignemnt will never stop, just wrap around.
 
-_gpreset=Number_  
+You can switch to a different genre by selecting a new genre from the list using (Up) or (Down). Or you can switch back to playing from preferences
+by pressing (A) while the genre selection list is shown.
 
-where Number can be any number. If this number (lets call it n) is between 0 and 'number of stations in that genre - 1', the n-th entry of that list is selected. N can also be greater than the number of stations (or even below zero), modulo function is used in that case to map n always between 0 and 'number of stations in that genre' - 1.
-
-If no genre has been set by the _genre=XXXX_ command above, _gpreset=n_ has no effect.
-
-So selecting a station is still "fishing in the dark", but it is at least reproducible (if you find that favorite station of yours at index 4711).
-
-If you issue command _genre=Anothername_ with another genre name, the radio will switch to that genre.
-
-If you issue command with no name (empty), the genre playmode will be stopped. The current station will continue to
-play (until another preset or channel is selected). _gpreset=n_ however will have no effect. You can also issue the command _genre_ with parameter _genre=--stop_ to achieve the same if you prefer a more clear reading.
-
-You can also switch stations within a genre using the _channel_ command from above. To do so, a channel-list must be defined.
-The preset-numbers assigned to the channel entries are ignored, just the size of the channel list is important.
-In the channel example above we defined a channel list with 9 channels. If you switch to genre-playmode, that channel
-list can be used to change stations within that genre by the following algorithm:
-- each channel has a random number between 0 and 'number of channels in that genre - 1' assigned.
-- one of the channel entries is the current channel (the one last selected by _channel=n_)
-- the distance between two channel stations is the same for all neighbors (and wrapped around between channel 9 and 1) in our example. So if in our case we would have a genre list with 90 stations, the distance between two channels would be 10.
-- example list in that case could be Channel 1: 72, Channel 2: 82, Channel 3: 2, Channel 4: 12 .... Channel 9: 62
-- that assignment stays stable until:
-  - a new random station is forced by the command _genre = Xxxxxx_, this will result in a completely different list.
-  - a new station is forced by the command _gpreset = n_
-  - the command _channe=up_ is issued. The numbers associated to the channels are increased by one (as well as the currently playing station from the genre will be switched to next in list)
-  - the command _channel=down_ is issued. The numbers in the channellist are decreased by 1 (also for the current station)
-  - the command _channel=any_ is issued. This will result in playing another (random) station and will also result in
-    a completely different list.
+#### Selecting from Serial command line
+- use _genre=name_ from command line on Serial monitor to switch to a genre (Unicode characters are fine here, you can copy a genre name from the
+  Web interface). Remember that names are case sensitive. So 'rock' is different from 'Rock'.
+- whenever a genre is chosen that way, a new random station will play. The Odroid will update the display and on the bottom line you the number _n_ 
+  of stations in that genre as well as the number of the current station (note that this number starts from 0, so the _n_ stations are in fact 
+  numbered starting with _'0'_ to _'n-1'_).
+- you can chose a different station from the current genre by using the command _gpreset=x_, where _x_ should be a number in the range _'0'_ up to
+ _'n-1'_.
 
 
-
-### Configuring anything around genres
+#### Configuring anything around genres
 
 To configure genre settings use the command 
 
@@ -271,26 +256,15 @@ The command can be used from command line or from the preference settings in NVS
 
 The following commands (including subcommands) are defined:
 
-- **_gcfg.path=/root/path_** All playlist information is stored in Flash (using LITTLEFS) or on SD-Card. If path value does start with 'SD:' (case ignored), the genre lists will be stored on SD card using the path following the token 'SD:'. If not, the genre information is stored in Flash, using LITTLEFS with path '/root/path' in this example.
-No validity checking, if the given path does not exists or is invalid, genre playlists will be dysfunctional. (For historic reason, **defaults to '/____gen.res/genres'**). Must not end with '/'! Can be changed at any time (to allow for different genre playlists for different users).
 - **_gcfg.host=hostURL_** Set the host to RDBS. **Defaults to 'de1.api.radio-browser.info'** if not set. 'de', 'nl', 'fr' can be used (as short cuts) to address 'de1.api.radio-browser.info', 'nl1.api.radio-browser.info' or 'fr1.api.radio-browser.info' respectively. Otherwise full server name must be given.
-- **_gcfg.nonames=x_** if x is nonZero, station names will be stored in genre playlists (not just URLs). Currently, station names from genre playlists are not used at all but might be useful in future versions. When short on storage, set to '1'. **Defaults to 0**, so station names will be stored.
 
 ### Considerations (and limitations) around using genre playlists
 
 The total number of genre lists is limited (to 1000). This is a compile time limitation that can not be changed by a command or a preference setting. 
 
-For faster access, some information is cached. For caching, PSRAM is preferred. If PSRAM is not available, normal heap is used. PSRAM should be plenty, however, if there is no sufficient heap, operation might be slower. (Use command _test_ from the Serial input. If the reported Free Memory is below 100.000, it is likely that RAM caching is
-not available.)
-
-On a board with 16MB flash I was able to load around 33.000 stations within 740 genres before the flash was fully used. With SD-card even more will be possible. However, SD access is slower. It is using shared access with the SPI. You will notice quite a few debug messages saying "SPI semaphore not taken...". That is annoying but still fine. It is probably advisable to stop radio playback (using _stop_ from the Serial command line) to limit the access conflicts on the SPI bus if you maintain the genre playlists (adding/deleting/reloading).
-
-If the radio stream stalls, the radio has a fallback strategy to switch to another preset. If that happens when playing from a genre playlist, the radio would fall back to a preset from the preset list in preferences.
-You will notice that in genre playlist mode this can happen (for remote stations with a bad connection). In a next step, this fallback needs to be recoded to use another station from the current genre playlist. If you want to avoid the fallback to a preset from NVS, use the command _preset=--stop_. This will block fallback to a station from presets until a station from presets is requested (for instance by _preset=n_  or _channel=m_ if genre play mode has stopped).
+For faster access, some information is cached. For caching, PSRAM is preferred. If PSRAM is not available, normal heap is used. PSRAM should be plenty, however, if there is no sufficient heap, operation might be slower. (Use command _test_ from the Serial input. If the reported Free Memory is below 100.000, it is likely that RAM caching is not available.)
 
 When in genre play mode, you can still issue a _preset=n_ command and the radio will play the according preset from the preferences. However, genre playlist mode will not be stopped: the command _gpreset=n_ as well as _channel=m_ (if channellist is defined) will still operate on the current genre playlist.
-
-
 
 ## MENUs
 ### General
