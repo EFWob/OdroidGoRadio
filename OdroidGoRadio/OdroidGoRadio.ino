@@ -1,25 +1,16 @@
+#define ARDUINO_ODROID_ESP32
+//***************************************************************************************************
 //*  ESP32_Radio -- Webradio receiver for ESP32, VS1053 MP3 module and optional display.            *
 //*                 By Ed Smallenburg.                                                              *
 //***************************************************************************************************
-// #if defined(ARDUINO_ODROID_ESP32) || defined(ARDUINO_M5STACK_FIRE)
-// All changes for ODROID-GO can be identified by searching for "defined(ARDUINO_ODROID_ESP32)
-// This even holds true for comment sections like this one here.
-// #if defined(ARDUINO_M5STACK_FIRE)
-#define ARDUINO_ODROID_ESP32
-// #endif
-// #endif 
 // ESP32 libraries used:
 //  - WiFiMulti
-//  - nvs
 //  - Adafruit_ST7735
 //  - ArduinoOTA
-//  - PubSubClientenc_dt_pin
+//  - PubSubClient
 //  - SD
 //  - FS
 //  - update
-#if defined(ARDUINO_ODROID_ESP32)
-//  - Odroid-Go library
-#endif
 // A library for the VS1053 (for ESP32) is not available (or not easy to find).  Therefore
 // a class for this module is derived from the maniacbug library and integrated in this sketch.
 //
@@ -82,30 +73,6 @@
 // VCC 5 V  -       pin 6 VCC           pin 9 5V                      Power supply
 // EN       -       pin 1 RST           pin 3 XRST                    -
 //
-#if defined(ARDUINO_ODROID_ESP32)
-// #if defined(ARDUINO_ODROID_ESP32) to identify change
-//
-//
-// ESP32dev Signal  Wired to LCD        Wired to VS1053      SDCARD   
-//                  (internal)          (header pins)        (internal)
-// -------- ------  --------------      -------------------  ------   
-// GPIO5            CS                  -                     -      
-// GPIO4            -                   (5) DREQ V10          -       
-// gpio21           (?)                 -                     -
-// GPIO22           -                   -                     CS      
-// gpio12           -                   (3) XCS   V7          -
-// gpio14           (? Backlight ?)     -                     -
-// gpio15           -                   (4) XDCS  V9          -
-// GPIO18   SCK     SCK                 (2)       V6          SCK     
-// GPIO19   MISO    MISO                (7)       V4          MISO    
-// GPIO23   MOSI    MOSI                (8)       V5          MOSI    
-// GPI03    RXD0    -                   -                     -       Reserved serial input
-// GPIO1    TXD0    -                   -                     -       Reserved serial output
-// -------  ------  ---------------     -------------------  ------   ----------------
-// GND      -       GND                 (1)       V2  sw                Power supply GND
-// VCC 5 V  -       -                   (10)      V1  rt                Power supply VCC
-// EN       -                           -                     -
-#endif
 // 26-04-2017, ES: First set-up, derived from ESP8266 version.
 // 08-05-2017, ES: Handling of preferences.
 // 20-05-2017, ES: Handling input buttons and MQTT.
@@ -172,26 +139,56 @@
 // 06-08-2018, ES: Correction negative time offset, OTA through remote host.
 // 16-08-2018, ES: Added Nextion support.
 // 18-09-2018, ES: "uppreset" and "downpreset" for MP3 player.
-// 04-10-2018, ES: Fixed compile error OLED 64x128 display
-//
-//
+// 04-10-2018, ES: Fixed compile error OLED 64x128 display.
+// 09-10-2018, ES: Bug fix xSemaphoreTake.
+// 05-01-2019, ES: Fine tune datarate.
+// 05-01-2019, ES: Basic http authentication. (just one user)
+// 11-02-2019, ES: MQTT topic and subtopic size enlarged.
+// 24-04-2019, ES: Do not lock SPI during gettime().  Calling gettime may take a long time.
+// 15-05-2019, ES: MAX number of presets as a defined constant.
+// 16-12-2019, ES: Modify of claimSPI() function for debugability.
+// 21-12-2019, ES: Check chip version.
+// 23-03-2020, ES: Allow playlists on SD card.
+// 25-03-2020, ES: End of playlist: start over.
+// 09-07-2020, ES: Add CH376 support.
+// 14-07-2020, ES: Dynamic status display in webinterface.
+// 17-09-2020, ES: Support for LCD2004. Thanks to mrohner.
+// 30-09-2020, ES: Ready for ch376msc library Version 1.4.4
+// 14-10-2020, ES: Clear artist and title on new station connect.
+// 19-10-2020, ES: Fixed LCD2004 errror.
+// 27-12-2020, ES: Do not read small buffer from stream.
+// 21-01-2021, ES: PlatformIO version.
+// 15-02-2021, ES: Added search page in web interface.
+// 16-02-2021, ES: Give BBC stations some time to react on initial request.
+// 19-02-2021, ES: More Oled models.
+// 25-04-2021, ES: Fixed playlist bug.
+// 29-04-2021, ES: Fixed SSD1309 bug, thanks to Juraj Liso.
+// 21-06-2021, ES: Display station name if not in metadata
+// 28-06-2021, ES: Convert special characters in station name
 // Define the version number, also used for webserver as Last-Modified header and to
 // check version for update.  The format must be exactly as specified by the HTTP standard!
-#define VERSION     "Thu, 14 Oct 2018 07:22:32 GMT"
+#define VERSION     "Mon, 28 Jun 2021 12:40:00 GMT"
 // ESP32-Radio can be updated (OTA) to the latest version from a remote server.
 // The download uses the following server and files:
 #define UPDATEHOST  "smallenburg.nl"                    // Host for software updates
-#define BINFILE     "/Arduino/Esp32_radio.ino.bin"      // Binary file name for update software
+#define BINFILE     "/Arduino/ESP32_radio/firmware.bin" // Binary file name for update software
 #define TFTFILE     "/Arduino/ESP32-Radio.tft"          // Binary file name for update NEXTION image
 //
+// Define type of local filesystem(s).  See documentation.
+//#define CH376                          // For CXH376 support (reading files from USB stick)
+//#define SDCARD                         // For SD card support (reading files from SD card)
 // Define (just one) type of display.  See documentation.
-//#define BLUETFT                      // Works also for RED TFT 128x160
-//#define OLED                         // 64x128 I2C OLED
+//#define BLUETFT                        // Works also for RED TFT 128x160
+//#define OLED1306                     // 64x128 I2C OLED SSD1306
+//#define OLED1309                     // 64x128 I2C OLED SSD1309
+//#define OLED1106                     // 64x128 I2C OLED SH1106
 //#define DUMMYTFT                     // Dummy display
 //#define LCD1602I2C                   // LCD 1602 display with I2C backpack
+//#define LCD2004I2C                   // LCD 2004 display with I2C backpack
 //#define ILI9341                      // ILI9341 240*320
 //#define NEXTION                      // Nextion display. Uses UART 2 (pin 16 and 17)
 //
+#include <Arduino.h>
 #include <nvs.h>
 #include <PubSubClient.h>
 #include <WiFiMulti.h>
@@ -199,8 +196,6 @@
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
-#include <FS.h>
-#include <SD.h>
 #include <SPI.h>
 #include <ArduinoOTA.h>
 #include <freertos/queue.h>
@@ -209,15 +204,26 @@
 #include <esp_partition.h>
 #include <driver/adc.h>
 #include <Update.h>
+#include <base64.h>
+#if defined(ARDUINO_ODROID_ESP32)
+#include "OdroidExtra.h"
+#endif
 
 // Number of entries in the queue
 #define QSIZ 400
 // Debug buffer size
 #define DEBUG_BUFFER_SIZE 150
+#define NVSBUFSIZE 150
 // Access point name if connection to WiFi network fails.  Also the hostname for WiFi and OTA.
-// Not that the password of an AP must be at least as long as 8 characters.
+// Note that the password of an AP must be at least as long as 8 characters.
 // Also used for other naming.
+#if defined(ARDUINO_ODROID_ESP32)
 #define NAME "ODROIDRadio"
+#else
+#define NAME "ESP32Radio"
+#endif
+// Max number of presets in preferences
+#define MAXPRESETS 200
 // Maximum number of MQTT reconnects before give-up
 #define MAXMQTTCONNECTS 5
 // Adjust size of buffer to the longest expected string for nvsgetstr
@@ -255,19 +261,32 @@ void        chomp ( String &str ) ;
 String      httpheader ( String contentstype ) ;
 bool        nvssearch ( const char* key ) ;
 void        mp3loop() ;
+void        stop_mp3client () ;
 void        tftlog ( const char *str ) ;
-void        playtask ( void * parameter ) ;       // Task to play the stream
-void        spftask ( void * parameter ) ;        // Task for special functions
+void        tftset ( uint16_t inx, const char *str ) ;
+void        tftset ( uint16_t inx, String& str ) ;
+void        playtask ( void * parameter ) ;             // Task to play the stream
+void        spftask ( void * parameter ) ;              // Task for special functions
 void        gettime() ;
 void        reservepin ( int8_t rpinnr ) ;
+void        claimSPI ( const char* p ) ;                // Claim SPI bus for exclusive access
+void        releaseSPI() ;                              // Release the claim
+char        utf8ascii ( char ascii ) ;                  // Convert UTF8 char to normal char
+void        utf8ascii_ip ( char* s ) ;                  // In place conversion full string
+String      utf8ascii ( const char* s ) ;
+uint32_t    ssconv ( const uint8_t* bytes ) ;
+void scan_content_length ( const char* metalinebf ) ;
 
 
 //**************************************************************************************************
-// Several structs.                                                                                *
+// Several structs and enums.                                                                      *
 //**************************************************************************************************
 //
 
-/*
+enum fs_type { FS_USB, FS_SD } ;                      // USB- or SD interface
+
+#if defined(ARDUINO_ODROID_ESP32)
+#else
 struct scrseg_struct                                  // For screen segments
 {
   bool     update_req ;                               // Request update of screen
@@ -275,12 +294,8 @@ struct scrseg_struct                                  // For screen segments
   uint16_t y ;                                        // Begin of segment row
   uint16_t height ;                                   // Height of segment
   String   str ;                                      // String to be displayed
-#if defined(ARDUINO_ODROID_ESP32)
-  bool     hidden;                                    // if set, update_req will not be set. 
-  uint16_t x;                                         // x coordinate. Will be 0 normally
-#endif
 } ;
-*/
+#endif
 
 enum qdata_type { QDATA, QSTARTSONG, QSTOPSONG } ;    // datatyp in qdata_struct
 struct qdata_struct
@@ -298,10 +313,7 @@ struct ini_struct
   String         mqttpasswd ;                         // Password for MQTT authentication
   uint8_t        reqvol ;                             // Requested volume
   uint8_t        rtone[4] ;                           // Requested bass/treble settings
-  int8_t         newpreset ;                          // Requested preset
-#if defined(ARDUINO_ODROID_ESP32_OBSOLETE)
-  uint32_t       newgenrestation;                     // Requested Genre (upper 2 bytes) and station (lower 2 bytes)
-#endif
+  int16_t        newpreset ;                          // Requested preset
   String         clk_server ;                         // Server to be used for time of day clock
   int8_t         clk_offset ;                         // Offset in hours with respect to UTC
   int8_t         clk_dst ;                            // Number of hours shift during DST
@@ -324,6 +336,8 @@ struct ini_struct
   int8_t         spi_sck_pin ;                        // GPIO connected to SPI SCK pin
   int8_t         spi_miso_pin ;                       // GPIO connected to SPI MISO pin
   int8_t         spi_mosi_pin ;                       // GPIO connected to SPI MOSI pin
+  int8_t         ch376_cs_pin ;                       // GPIO connected to CH376 SS
+  int8_t         ch376_int_pin ;                      // GPIO connected to CH376 INT
   uint16_t       bat0 ;                               // ADC value for 0 percent battery charge
   uint16_t       bat100 ;                             // ADC value for 100 percent battery charge
 } ;
@@ -358,7 +372,7 @@ struct nvs_page                                       // For nvs entries
 
 struct keyname_t                                      // For keys in NVS
 {
-  char      Key[16] ;                                 // Mac length is 15 plus delimeter
+  char      Key[16] ;                                 // Max length is 15 plus delimeter
 } ;
 
 //**************************************************************************************************
@@ -370,17 +384,20 @@ struct keyname_t                                      // For keys in NVS
 // Items in ini_block can be changed by commands from webserver/MQTT/Serial.                       *
 //**************************************************************************************************
 
-enum display_t { T_UNDEFINED, T_BLUETFT, T_OLED,         // Various types of display
-                 T_DUMMYTFT, T_LCD1602I2C, T_ILI9341,
-                 T_NEXTION } ;
+enum display_t { T_UNDEFINED, T_BLUETFT, T_OLED,             // Various types of display
+                 T_DUMMYTFT, T_LCD1602I2C, T_LCD2004I2C,
+                 T_ILI9341, T_NEXTION } ;
 
-enum datamode_t { INIT = 1, HEADER = 2, DATA = 4,        // State for datastream
-                  METADATA = 8, PLAYLISTINIT = 16,
-                  PLAYLISTHEADER = 32, PLAYLISTDATA = 64,
-                  STOPREQD = 128, STOPPED = 256
+enum datamode_t { INIT = 0x1, HEADER = 0x2, DATA = 0x4,      // State for datastream
+                  METADATA = 0x8, PLAYLISTINIT = 0x10,
+                  PLAYLISTHEADER = 0x20, PLAYLISTDATA = 0x40,
+                  STOPREQD = 0x80, STOPPED = 0x100
                 } ;
 
 // Global variables
+#if defined(ARDUINO_ODROID_ESP32)
+bool              odroidVsError = false;                 // True if VS1053 is not available
+#endif
 int               DEBUG = 1 ;                            // Debug on/off
 int               numSsid ;                              // Number of available WiFi networks
 WiFiMulti         wifiMulti ;                            // Possible WiFi networks
@@ -416,10 +433,7 @@ String            ipaddress ;                            // Own IP-address
 int               bitrate ;                              // Bitrate in kb/sec
 int               mbitrate ;                             // Measured bitrate
 int               metaint = 0 ;                          // Number of databytes between metadata
-int8_t            currentpreset = -1 ;                   // Preset station playing
-#if defined(ARDUINO_ODROID_ESP32_OBSOLETE)
-uint32_t          currentgenrestation = 0 ;              // Current Genre (upper 2 bytes) and station (lower 2 bytes)
-#endif
+int16_t           currentpreset = -1 ;                   // Preset station playing
 String            host ;                                 // The URL to connect to or file to play
 String            playlist ;                             // The URL of the specified playlist
 bool              hostreq = false ;                      // Request for new host
@@ -433,23 +447,19 @@ String            networks ;                             // Found networks in th
 uint16_t          mqttcount = 0 ;                        // Counter MAXMQTTCONNECTS
 int8_t            playingstat = 0 ;                      // 1 if radio is playing (for MQTT)
 int16_t           playlist_num = 0 ;                     // Nonzero for selection from playlist
-File              mp3file ;                              // File containing mp3 on SD card
+fs_type           usb_sd = FS_USB ;                      // SD or USB interface
 uint32_t          mp3filelength ;                        // File length
 bool              localfile = false ;                    // Play from local mp3-file or not
 bool              chunked = false ;                      // Station provides chunked transfer
 int               chunkcount = 0 ;                       // Counter for chunked transfer
 String            http_getcmd ;                          // Contents of last GET command
 String            http_rqfile ;                          // Requested file
-bool              http_reponse_flag = false ;            // Response required
+bool              http_response_flag = false ;           // Response required
 uint16_t          ir_value = 0 ;                         // IR code
 uint32_t          ir_0 = 550 ;                           // Average duration of an IR short pulse
 uint32_t          ir_1 = 1650 ;                          // Average duration of an IR long pulse
 struct tm         timeinfo ;                             // Will be filled by NTP server
 bool              time_req = false ;                     // Set time requested
-bool              SD_okay = false ;                      // True if SD card in place and readable
-String            SD_nodelist ;                          // Nodes of mp3-files on SD
-int               SD_nodecount = 0 ;                     // Number of nodes in SD_nodelist
-String            SD_currentnode = "" ;                  // Node ID of song playing ("0" if random)
 uint16_t          adcval ;                               // ADC value (battery voltage)
 uint32_t          clength ;                              // Content length found in http header
 uint32_t          max_mp3loop_time = 0 ;                 // To check max handling time in mp3loop (msec)
@@ -457,6 +467,7 @@ int16_t           scanios ;                              // TEST*TEST*TEST
 int16_t           scaniocount ;                          // TEST*TEST*TEST
 uint16_t          bltimer = 0 ;                          // Backlight time-out counter
 display_t         displaytype = T_UNDEFINED ;            // Display type
+int               ir_intcount = 0 ;                      // For test IR interrupts
 std::vector<WifiInfo_t> wifilist ;                       // List with wifi_xx info
 // nvs stuff
 nvs_page                nvsbuf ;                         // Space for 1 page of NVS info
@@ -485,21 +496,12 @@ struct progpin_struct                                    // For programmable inp
   bool           reserved ;                              // Reserved for connected devices
   bool           avail ;                                 // Pin is available for a command
   String         command ;                               // Command to execute when activated
-  // Example: "uppreset=1"
+                                                         // Example: "uppreset=1"
   bool           cur ;                                   // Current state, true = HIGH, false = LOW
 } ;
 
-#if defined(ARDUINO_ODROID_ESP32)
- bool odroidVsError = 0;
- 
 progpin_struct   progpin[] =                             // Input pins and programmed function
 {
-//There are no pins for programmed functions on ODROID GO
-  {-1, false, false, "", false},
-#else
-progpin_struct   progpin[] =                             // Input pins and programmed function
-{
-#endif
   {  0, false, false,  "", false },
   //{  1, true,  false,  "", false },                    // Reserved for TX Serial output
   {  2, false, false,  "", false },
@@ -553,10 +555,6 @@ struct touchpin_struct                                   // For programmable inp
 } ;
 touchpin_struct   touchpin[] =                           // Touch pins and programmed function
 {
-#if defined(ARDUINO_ODROID_ESP32)
-//There are no Touch-pins for programmed functions on ODROID GO
-  {-1, false, false, "", false},
-#endif
   {   4, false, false, "", false, 0 },                   // TOUCH0
   {   0, true,  false, "", false, 0 },                   // TOUCH1, reserved for BOOT button
   {   2, false, false, "", false, 0 },                   // TOUCH2
@@ -582,6 +580,9 @@ touchpin_struct   touchpin[] =                           // Touch pins and progr
 #include "radio_css.h"
 #include "favicon_ico.h"
 #include "defaultprefs.h"
+#if !defined(ARDUINO_ODROID_ESP32)
+#include "search_html.h"
+#endif
 
 //**************************************************************************************************
 // End of global data section.                                                                     *
@@ -651,7 +652,7 @@ void mqttpubc::trigger ( uint8_t item )                    // Trigger publishig 
 void mqttpubc::publishtopic()
 {
   int         i = 0 ;                                         // Loop control
-  char        topic[40] ;                                     // Topic to send
+  char        topic[80] ;                                     // Topic to send
   const char* payload ;                                       // Points to payload
   char        intvar[10] ;                                    // Space for integer parameter
   while ( amqttpub[i].topic )
@@ -713,6 +714,7 @@ class VS1053
     const uint8_t vs1053_chunk_size = 32 ;
     // SCI Register
     const uint8_t SCI_MODE          = 0x0 ;
+    const uint8_t SCI_STATUS        = 0x1 ;
     const uint8_t SCI_BASS          = 0x2 ;
     const uint8_t SCI_CLOCKF        = 0x3 ;
     const uint8_t SCI_AUDATA        = 0x5 ;
@@ -728,6 +730,7 @@ class VS1053
     const uint8_t SM_RESET          = 2 ;         // Bitnumber in SCI_MODE soft reset
     const uint8_t SM_CANCEL         = 3 ;         // Bitnumber in SCI_MODE cancel song
     const uint8_t SM_TESTS          = 5 ;         // Bitnumber in SCI_MODE for tests
+    const uint8_t SM_STREAM         = 6 ;         // Bitnumber in SCI_MODE for stream mode
     const uint8_t SM_LINE1          = 14 ;        // Bitnumber in SCI_MODE for Line input
     SPISettings   VS1053_SPI ;                    // SPI settings for this slave
     uint8_t       endFillByte ;                   // Byte to send when stopping song
@@ -766,13 +769,10 @@ class VS1053
       digitalWrite ( dcs_pin, HIGH ) ;            // End data mode
       SPI.endTransaction() ;                      // Allow other SPI users
     }
-
 #if defined(ARDUINO_ODROID_ESP32)
   public:
     void loadUserCode(const uint16_t* plugin, size_t pluginSize);
 #endif    
-
-
     uint16_t    read_register ( uint8_t _reg ) const ;
     void        write_register ( uint8_t _reg, uint16_t _value ) const ;
     inline bool sdi_send_buffer ( uint8_t* data, size_t len ) ;
@@ -810,6 +810,8 @@ class VS1053
     {
       return ( digitalRead ( dreq_pin ) == HIGH ) ;
     }
+    void     AdjustRate ( long ppm2 ) ;                  // Fine tune the datarate
+    void     streamMode ( bool onoff ) ;
 } ;
 
 //**************************************************************************************************
@@ -907,39 +909,18 @@ uint16_t VS1053::wram_read ( uint16_t address )
   return read_register ( SCI_WRAM ) ;                   // Read back result
 }
 
-#if defined(ARDUINO_ODROID_ESP32)
-void VS1053::loadUserCode(const uint16_t* plugin, size_t pluginSize) {
-  int i = 0;
-  while (i < pluginSize) {
-    uint16_t addr, n, val;
-    addr = plugin[i++];
-    n = plugin[i++];
-    if (n & 0x8000U) {/* RLE run, replicate n samples */
-      n &= 0x7FFF;
-      val = plugin[i++];
-      while (n--) {
-        write_register(addr, val);
-      }
-    } else { /* Copy run, copy n samples */
-      while (n--) {
-        val = plugin[i++];
-        write_register(addr, val);
-      }
-    }
-  }
-}
-#endif
-
 bool VS1053::testComm ( const char *header )
 {
   // Test the communication with the VS1053 module.  The result wille be returned.
   // If DREQ is low, there is problably no VS1053 connected.  Pull the line HIGH
   // in order to prevent an endless loop waiting for this signal.  The rest of the
   // software will still work, but readbacks from VS1053 will fail.
-  int       i ;                                         // Loop control
-  uint16_t  r1, r2, cnt = 0 ;
-  uint16_t  delta = 300 ;                               // 3 for fast SPI
-
+  int            i ;                                    // Loop control
+  uint16_t       r1, r2, cnt = 0 ;
+  uint16_t       delta = 300 ;                          // 3 for fast SPI
+  const uint16_t vstype[] = { 1001, 1011, 1002, 1003,   // Possible chip versions
+                              1053, 1033, 0000, 1103 } ;
+  
   dbgprint ( header ) ;                                 // Show a header
   if ( !digitalRead ( dreq_pin ) )
   {
@@ -963,24 +944,31 @@ bool VS1053::testComm ( const char *header )
     r2 = read_register ( SCI_VOL ) ;                    // Read back a second time
     if  ( r1 != r2 || i != r1 || i != r2 )              // Check for 2 equal reads
     {
-      dbgprint ( "VS1053 error retry SB:%04X R1:%04X R2:%04X", i, r1, r2 ) ;
+      dbgprint ( "VS1053 SPI error. SB:%04X R1:%04X R2:%04X", i, r1, r2 ) ;
       cnt++ ;
       delay ( 10 ) ;
     }
   }
   okay = ( cnt == 0 ) ;                                 // True if working correctly
+  // Further testing: is it the right chip?
+  r1 = ( read_register ( SCI_STATUS ) >> 4 ) & 0x7 ;    // Read status to get the version
+  if ( r1 !=  4 )                                       // Version 4 is a genuine VS1053
+  {
+    dbgprint ( "This is not a VS1053, "                 // Report the wrong chip
+               "but a VS%d instead!",
+               vstype[r1] ) ;
+    //okay = false ;                                    // Standard codecs not fully supported
+  }
   return ( okay ) ;                                     // Return the result
 }
 
 void VS1053::begin()
 {
-  
   pinMode      ( dreq_pin,  INPUT ) ;                   // DREQ is an input
   pinMode      ( cs_pin,    OUTPUT ) ;                  // The SCI and SDI signals
   pinMode      ( dcs_pin,   OUTPUT ) ;
   digitalWrite ( dcs_pin,   HIGH ) ;                    // Start HIGH for SCI en SDI
   digitalWrite ( cs_pin,    HIGH ) ;
-
   if ( shutdown_pin >= 0 )                              // Shutdown in use?
   {
     pinMode ( shutdown_pin,   OUTPUT ) ;
@@ -990,7 +978,6 @@ void VS1053::begin()
     pinMode ( shutdownx_pin,   OUTPUT ) ;
   }
   output_enable ( false ) ;                            // Disable amplifier through shutdown pin(s)
-
   delay ( 100 ) ;
   // Init SPI in slow mode ( 0.2 MHz )
   VS1053_SPI = SPISettings ( 200000, MSBFIRST, SPI_MODE0 ) ;
@@ -999,12 +986,8 @@ void VS1053::begin()
   //printDetails ( "Right after reset/startup" ) ;
   delay ( 20 ) ;
   //printDetails ( "20 msec after reset" ) ;
-#if defined(ARDUINO_ODROID_ESP32)
   odroidVsError = !testComm ( "Slow SPI, Testing VS1053 read/write registers..." );
   if ( !odroidVsError )
-#else
-  if ( testComm ( "Slow SPI, Testing VS1053 read/write registers..." ) )
-#endif
   {
     // Most VS1053 modules will start up in midi mode.  The result is that there is no audio
     // when playing MP3.  You can modify the board, but there is a more elegant way:
@@ -1044,6 +1027,17 @@ void VS1053::setVolume ( uint8_t vol )
     value = map ( vol, 0, 100, 0xF8, 0x00 ) ;           // 0..100% to one channel
     value = ( value << 8 ) | value ;
     write_register ( SCI_VOL, value ) ;                 // Volume left and right
+    if ( vol == 0 )                                     // Completely silence?
+    {
+      output_enable ( false ) ;                         // Yes, mute amplifier
+    }
+    else
+    {
+      if ( datamode != STOPPED )
+      {
+      output_enable ( true ) ;                          // Enable amplifier if not stopped
+      }
+    }
     output_enable ( vol != 0 ) ;                        // Enable/disable amplifier through shutdown pin(s)
   }
 }
@@ -1081,14 +1075,14 @@ void VS1053::stopSong()
   output_enable ( false ) ;                             // Disable amplifier through shutdown pin(s)
   delay ( 10 ) ;
   write_register ( SCI_MODE, _BV ( SM_SDINEW ) | _BV ( SM_CANCEL ) ) ;
-  for ( i = 0 ; i < 200 ; i++ )
+  for ( i = 0 ; i < 20 ; i++ )
   {
     sdi_send_fillers ( 32 ) ;
-    modereg = read_register ( SCI_MODE ) ;  // Read status
-    if ( ( modereg & _BV ( SM_CANCEL ) ) == 0 )
+    modereg = read_register ( SCI_MODE ) ;              // Read mode status
+    if ( ( modereg & _BV ( SM_CANCEL ) ) == 0 )         // SM_CANCEL will be cleared when finished
     {
       sdi_send_fillers ( 2052 ) ;
-      //dbgprint ( "Song stopped correctly after %d msec", i * 10 ) ;
+      dbgprint ( "Song stopped correctly after %d msec", i * 10 ) ;
       return ;
     }
     delay ( 10 ) ;
@@ -1135,6 +1129,32 @@ void  VS1053::output_enable ( bool ena )               // Enable amplifier throu
 }
 
 
+void VS1053::AdjustRate ( long ppm2 )                  // Fine tune the data rate 
+{
+  write_register ( SCI_WRAMADDR, 0x1e07 ) ;
+  write_register ( SCI_WRAM,     ppm2 ) ;
+  write_register ( SCI_WRAM,     ppm2 >> 16 ) ;
+  // oldClock4KHz = 0 forces  adjustment calculation when rate checked.
+  write_register ( SCI_WRAMADDR, 0x5b1c ) ;
+  write_register ( SCI_WRAM,     0 ) ;
+  // Write to AUDATA or CLOCKF checks rate and recalculates adjustment.
+  write_register ( SCI_AUDATA,   read_register ( SCI_AUDATA ) ) ;
+}
+
+
+void VS1053::streamMode ( bool onoff )                // Set stream mode on/off
+{
+  uint16_t pat = _BV(SM_SDINEW) ;                     // Assume off
+
+  if ( onoff )                                        // Activate stream mode?
+  {
+    pat |= _BV(SM_STREAM) ;                           // Yes, set stream mode bit
+  }
+  write_register ( SCI_MODE, pat ) ;                  // Set new value
+  delay ( 10 ) ;
+  await_data_request() ;
+}
+
 // The object for the MP3 player
 VS1053* vs1053player ;
 
@@ -1143,32 +1163,41 @@ VS1053* vs1053player ;
 //**************************************************************************************************
 
 // Include software for the right display
-#if defined(ARDUINO_ODROID_ESP32)
-#include "OdroidExtra.h"
-
-#else
-
 #ifdef BLUETFT
-#include "bluetft.h"                                     // For ILI9163C or ST7735S 128x160 display
+ #include "bluetft.h"                                    // For ILI9163C or ST7735S 128x160 display
 #endif
 #ifdef ILI9341
-#include "ILI9341.h"                                     // For ILI9341 320x240 display
+ #include "ILI9341.h"                                    // For ILI9341 320x240 display
 #endif
-#ifdef OLED
-#include "SSD1306.h"                                     // For OLED I2C SD1306 64x128 display
+#ifdef OLED1306
+ #include "oled.h"                                       // For OLED I2C SD1306 64x128 display
+#endif
+#ifdef OLED1309
+ #include "oled.h"                                       // For OLED I2C SD1309 64x128 display
+#endif
+#ifdef OLED1106
+ #include "oled.h"                                       // For OLED I2C SH1106 64x128 display
 #endif
 #ifdef LCD1602I2C
-#include "LCD1602.h"                                     // For LCD 1602 display (I2C)
+ #include "oled.h.h"                                     // For LCD 1602 display (I2C)
+#endif
+#ifdef LCD2004I2C
+ #include "LCD2004.h"                                    // For LCD 2004 display (I2C)
 #endif
 #ifdef DUMMYTFT
-#include "Dummytft.h"                                    // For Dummy display
+ #include "Dummytft.h"                                   // For Dummy display
 #endif
 #ifdef NEXTION
-#include "NEXTION.h"                                     // For NEXTION display
+ #include "NEXTION.h"                                    // For NEXTION display
 #endif
+//
+#if !defined(ARDUINO_ODROID_ESP32)
+// Include software for CH376
+#include "CH376.h"                                       // For CH376 USB interface
+#endif
+// Include software for SD card
+#include "SDcard.h"                                      // For SD caard interface
 
-#endif  //ARDUINO_ODROID_ESP32
- 
 //**************************************************************************************************
 //                                           B L S E T                                             *
 //**************************************************************************************************
@@ -1190,6 +1219,60 @@ void IRAM_ATTR blset ( bool enable )
     bltimer = 0 ;                                        // Reset counter backlight time-out
   }
 }
+
+
+//**************************************************************************************************
+//                                      D I S P L A Y T I M E                                      *
+//**************************************************************************************************
+// Show the time on the LCD at a fixed position in a specified color                               *
+// To prevent flickering, only the changed part of the timestring is displayed.                    *
+// An empty string will force a refresh on next call.                                              *
+// A character on the screen is 8 pixels high and 6 pixels wide.                                   *
+//**************************************************************************************************
+void displaytime ( const char* str, uint16_t color )
+{
+  static char oldstr[9] = "........" ;             // For compare
+  uint8_t     i ;                                  // Index in strings
+  uint16_t    pos = dsp_getwidth() + TIMEPOS ;     // X-position of character, TIMEPOS is negative
+#if defined ARDUINO_ODROID_ESP32
+  if (tftdata[0].hidden) {
+    sprintf(oldstr, "........");
+    return;  
+  }
+#endif
+
+
+  if ( str[0] == '\0' )                            // Empty string?
+  {
+    for ( i = 0 ; i < 8 ; i++ )                    // Set oldstr to dots
+    {
+      oldstr[i] = '.' ;
+    }
+    return ;                                       // No actual display yet
+  }
+  if ( tft )                                       // TFT active?
+  {
+    dsp_setTextColor ( color ) ;                   // Set the requested color
+    for ( i = 0 ; i < 8 ; i++ )                    // Compare old and new
+    {
+      if ( str[i] != oldstr[i] )                   // Difference?
+      {
+#if defined ARDUINO_ODROID_ESP32
+        dsp_fillRect ( pos, tftdata[0].y, 6, 8, BLACK ) ;     // Clear the space for new character
+        dsp_setCursor ( pos, tftdata[0].y ) ;                 // Prepare to show the info
+#else
+        dsp_fillRect ( pos, 0, 6, 8, BLACK ) ;     // Clear the space for new character
+        dsp_setCursor ( pos, 0 ) ;                 // Prepare to show the info
+#endif
+        dsp_print ( str[i] ) ;                     // Show the character
+        oldstr[i] = str[i] ;                       // Remember for next compare
+      }
+      pos += 6 ;                                   // Next position
+    }
+  }
+}
+
+
 
 
 //**************************************************************************************************
@@ -1304,22 +1387,31 @@ void nvschkey ( const char* oldk, const char* newk )
 //                                      C L A I M S P I                                            *
 //**************************************************************************************************
 // Claim the SPI bus.  Uses FreeRTOS semaphores.                                                   *
+// If the semaphore cannot be claimed within the time-out period, the function continues without   *
+// claiming the semaphore.  This is incorrect but allows debugging.                                *
 //**************************************************************************************************
 void claimSPI ( const char* p )
 {
-  const        TickType_t ctry = 10 ;                       // Time to wait for semaphore
-  uint32_t     count = 0 ;                                  // Wait time in ticks
+  const              TickType_t ctry = 10 ;                 // Time to wait for semaphore
+  uint32_t           count = 0 ;                            // Wait time in ticks
+  static const char* old_id = "none" ;                      // ID that holds the bus
 
-  while ( xSemaphoreTake ( SPIsem, ctry ) != pdTRUE  ) ;    // Claim SPI bus
+  while ( xSemaphoreTake ( SPIsem, ctry ) != pdTRUE  )      // Claim SPI bus
   {
-    if ( count++ > 10 )
+    if ( count++ > 25 )
     {
       dbgprint ( "SPI semaphore not taken within %d ticks by CPU %d, id %s",
                  count * ctry,
                  xPortGetCoreID(),
                  p ) ;
+      dbgprint ( "Semaphore is claimed by %s", old_id ) ;
+    }
+    if ( count >= 100 )
+    {
+      return ;                                               // Continue without semaphore
     }
   }
+  old_id = p ;                                               // Remember ID holding the semaphore
 }
 
 
@@ -1344,7 +1436,7 @@ void queuefunc ( int func )
   qdata_struct     specchunk ;                          // Special function to queue
 
   specchunk.datatyp = func ;                            // Put function in datatyp
-  xQueueSend ( dataqueue, &specchunk, 200 ) ;           // Send to queue
+  xQueueSendToFront ( dataqueue, &specchunk, 200 ) ;    // Send to queue (First Out)
 }
 
 
@@ -1374,9 +1466,12 @@ void tftset ( uint16_t inx, const char *str )
   {
     if ( str )                                          // String specified?
     {
+#if defined(ARDUINO_ODROID_ESP32)
+      String s = String ( str ) ;
+      tftset ( inx, s );
+#else
       tftdata[inx].str = String ( str ) ;               // Yes, set string
-//      if (0 == inx)
-  //      Serial.printf("TFTDATA[0] set to: %s\r\n", str);
+#endif
     }
     tftdata[inx].update_req = true ;                    // and request flag
   }
@@ -1386,6 +1481,12 @@ void tftset ( uint16_t inx, String& str )
 {
   if ( inx < TFTSECS )                                  // Segment available on display
   {
+#if defined(ARDUINO_ODROID_ESP32)
+    if (str.length() > 26 * (tftdata[inx].height / 8))  // String to wide?
+      tftdata[inx].str = str.substring(0,               // Shorten String to fit...
+                          26 * (tftdata[inx].height / 8)) ;
+    else
+#endif  
     tftdata[inx].str = str ;                            // Set string
     tftdata[inx].update_req = true ;                    // and request flag
   }
@@ -1399,12 +1500,12 @@ void tftset ( uint16_t inx, String& str )
 // Convert a single Character from UTF8 to Extended ASCII.                                         *
 // Return "0" if a byte has to be ignored.                                                         *
 //**************************************************************************************************
-byte utf8ascii ( byte ascii )
+char utf8ascii ( char ascii )
 {
-  static const byte lut_C3[] =
-  { "AAAAAAACEEEEIIIIDNOOOOO#0UUUU###aaaaaaaceeeeiiiidnooooo##uuuuyyy" } ;
-  static byte       c1 ;              // Last character buffer
-  byte              res = 0 ;         // Result, default 0
+  static const char lut_C3[] = { "AAAAAAACEEEEIIIIDNOOOOO#0UUUU###"
+                                 "aaaaaaaceeeeiiiidnooooo##uuuuyyy" } ;
+  static char       c1 ;              // Last character buffer
+  char              res = '\0' ;      // Result, default 0
 
   if ( ascii <= 0x7F )                // Standard ASCII-set 0..0x7F handling
   {
@@ -1431,11 +1532,11 @@ byte utf8ascii ( byte ascii )
 
 
 //**************************************************************************************************
-//                                      U T F 8 A S C I I                                          *
+//                                U T F 8 A S C I I _ I P                                          *
 //**************************************************************************************************
 // In Place conversion UTF8-string to Extended ASCII (ASCII is shorter!).                          *
 //**************************************************************************************************
-void utf8ascii ( char* s )
+void utf8ascii_ip ( char* s )
 {
   int  i, k = 0 ;                     // Indexes for in en out string
   char c ;
@@ -1495,245 +1596,6 @@ char* dbgprint ( const char* format, ... )
     Serial.println ( sbuf ) ;                          // and the info
   }
   return sbuf ;                                        // Return stored string
-}
-
-
-
-
-//**************************************************************************************************
-//                                  S E L E C T N E X T S D N O D E                                *
-//**************************************************************************************************
-// Select the next or previous mp3 file from SD.  If the last selected song was random, the next   *
-// track is a random one too.  Otherwise the next/previous node is choosen.                        *
-// If nodeID is "0" choose a random nodeID.                                                        *
-// Delta is +1 or -1 for next or previous track.                                                   *
-// The nodeID will be returned to the caller.                                                      *
-//**************************************************************************************************
-String selectnextSDnode ( String curnod, int16_t delta )
-{
-  int16_t        inx, inx2 ;                           // Position in nodelist
-
-  if ( hostreq )                                       // Host request already set?
-  {
-    return "" ;                                        // Yes, no action
-  }
-  dbgprint ( "SD_currentnode is %s, "
-             "curnod is %s, "
-             "delta is %d",
-             SD_currentnode.c_str(),
-             curnod.c_str(),
-             delta ) ;
-  if ( SD_currentnode == "0" )                         // Random playing?
-  {
-    return SD_currentnode ;                            // Yes, return random nodeID
-  }
-  else
-  {
-    inx = SD_nodelist.indexOf ( curnod ) ;             // Get position of current nodeID in list
-    if ( delta > 0 )                                   // Next track?
-    {
-      inx += curnod.length() + 1 ;                     // Get position of next nodeID in list
-      if ( inx >= SD_nodelist.length() )               // End of list?
-      {
-        inx = 0 ;                                      // Yes, wrap around
-      }
-    }
-    else
-    {
-      if ( inx == 0 )                                  // At the begin of the list?
-      {
-        inx = SD_nodelist.length()  ;                  // Yes, goto end of list
-      }
-      inx-- ;                                          // Index of delimeter of previous node ID
-      while ( ( inx > 0 ) &&
-              ( SD_nodelist[inx - 1] != '\n' ) )
-      {
-        inx-- ;
-      }
-    }
-    inx2 = SD_nodelist.indexOf ( "\n", inx ) ;         // Find end of node ID
-  }
-  return SD_nodelist.substring ( inx, inx2 ) ;         // Return nodeID
-}
-
-
-//**************************************************************************************************
-//                                      G E T S D F I L E N A M E                                  *
-//**************************************************************************************************
-// Translate the nodeID of a track to the full filename that can be used as a station.             *
-// If nodeID is "0" choose a random nodeID.                                                        *
-//**************************************************************************************************
-String getSDfilename ( String nodeID )
-{
-  String          res ;                                    // Function result
-  File            root, file ;                             // Handle to root and directory entry
-  uint16_t        n, i ;                                   // Current seqnr and counter in directory
-  int16_t         inx ;                                    // Position in nodeID
-  const char*     p = "/" ;                                // Points to directory/file
-  uint16_t        rndnum ;                                 // Random index in SD_nodelist
-  int             nodeinx = 0 ;                            // Points to node ID in SD_nodecount
-  int             nodeinx2 ;                               // Points to end of node ID in SD_nodecount
-
-  SD_currentnode = nodeID ;                                // Save current node
-  if ( nodeID == "0" )                                     // Empty parameter?
-  {
-    dbgprint ( "getSDfilename random choice" ) ;
-    rndnum = random ( SD_nodecount ) ;                     // Yes, choose a random node
-    for ( i = 0 ; i < rndnum ; i++ )                       // Find the node ID
-    {
-      // Search to begin of the random node by skipping lines
-      nodeinx = SD_nodelist.indexOf ( "\n", nodeinx ) + 1 ;
-    }
-    nodeinx2 = SD_nodelist.indexOf ( "\n", nodeinx ) ;     // Find end of node ID
-    nodeID = SD_nodelist.substring ( nodeinx,
-                                     nodeinx2 ) ;          // Get node ID
-  }
-  dbgprint ( "getSDfilename requested node ID is %s",      // Show requeste node ID
-             nodeID.c_str() ) ;
-  while ( ( n = nodeID.toInt() ) )                         // Next sequence in current level
-  {
-    inx = nodeID.indexOf ( "," ) ;                         // Find position of comma
-    if ( inx >= 0 )
-    {
-      nodeID = nodeID.substring ( inx + 1 ) ;              // Remove sequence in this level from nodeID
-    }
-    claimSPI ( "sdopen" ) ;                                // Claim SPI bus
-    root = SD.open ( p ) ;                                 // Open the directory (this level)
-    releaseSPI() ;                                         // Release SPI bus
-    for ( i = 1 ; i <=  n ; i++ )
-    {
-      claimSPI ( "sdopenxt" ) ;                            // Claim SPI bus
-      file = root.openNextFile() ;                         // Get next directory entry
-      releaseSPI() ;                                       // Release SPI bus
-      delay ( 10 ) ;                                       // Allow playtask
-    }
-    p = file.name() ;                                      // Points to directory- or file name
-  }
-  res = String ( "localhost" ) + String ( p ) ;            // Format result
-  return res ;                                             // Return full station spec
-}
-
-
-//**************************************************************************************************
-//                                      L I S T S D T R A C K S                                    *
-//**************************************************************************************************
-// Search all MP3 files on directory of SD card.  Return the number of files found.                *
-// A "node" of max. 4 levels ( the subdirectory level) will be generated for every file.           *
-// The numbers within the node-array is the sequence number of the file/directory in that          *
-// subdirectory.                                                                                   *
-// A node ID is a string like "2,1,4,0", which means the 4th file in the first directory           *
-// of the second directory.                                                                        *
-// The list will be send to the webinterface if parameter "send"is true.                           *
-//**************************************************************************************************
-int listsdtracks ( const char * dirname, int level = 0, bool send = true )
-{
-  const  uint16_t SD_MAXDEPTH = 4 ;                     // Maximum depts.  Note: see mp3play_html.
-  static uint16_t fcount, oldfcount ;                   // Total number of files
-  static uint16_t SD_node[SD_MAXDEPTH + 1] ;            // Node ISs, max levels deep
-  static String   SD_outbuf ;                           // Output buffer for cmdclient
-  uint16_t        ldirname ;                            // Length of dirname to remove from filename
-  File            root, file ;                          // Handle to root and directory entry
-  String          filename ;                            // Copy of filename for lowercase test
-  uint16_t        i ;                                   // Loop control to compute single node id
-  String          tmpstr ;                              // Tijdelijke opslag node ID
-
-  if ( strcmp ( dirname, "/" ) == 0 )                   // Are we at the root directory?
-  {
-    fcount = 0 ;                                        // Yes, reset count
-    memset ( SD_node, 0, sizeof(SD_node) ) ;            // And sequence counters
-    SD_outbuf = String() ;                              // And output buffer
-    SD_nodelist = String() ;                            // And nodelist
-    if ( !SD_okay )                                     // See if known card
-    {
-      if ( send )
-      {
-        cmdclient.println ( "0/No tracks found" ) ;     // No SD card, emppty list
-      }
-      return 0 ;
-    }
-  }
-  oldfcount = fcount ;                                  // To see if files found in this directory
-  //dbgprint ( "SD directory is %s", dirname ) ;        // Show current directory
-  ldirname = strlen ( dirname ) ;                       // Length of dirname to remove from filename
-  claimSPI ( "sdopen2" ) ;                              // Claim SPI bus
-  root = SD.open ( dirname ) ;                          // Open the current directory level
-  releaseSPI() ;                                        // Release SPI bus
-  if ( !root || !root.isDirectory() )                   // Success?
-  {
-    dbgprint ( "%s is not a directory or not root",     // No, print debug message
-               dirname ) ;
-    return fcount ;                                     // and return
-  }
-  while ( true )                                        // Find all mp3 files
-  {
-    claimSPI ( "opennextf" ) ;                          // Claim SPI bus
-    file = root.openNextFile() ;                        // Try to open next
-    releaseSPI() ;                                      // Release SPI bus
-    if ( !file )
-    {
-      break ;                                           // End of list
-    }
-    SD_node[level]++ ;                                  // Set entry sequence of current level
-    if ( file.name()[0] == '.' )                        // Skip hidden directories
-    {
-      continue ;
-    }
-    if ( file.isDirectory() )                           // Is it a directory?
-    {
-      if ( level < SD_MAXDEPTH )                        // Yes, dig deeper
-      {
-        listsdtracks ( file.name(), level + 1, send ) ; // Note: called recursively
-        SD_node[level + 1] = 0 ;                        // Forget counter for one level up
-      }
-    }
-    else
-    {
-      filename = String ( file.name() ) ;               // Copy filename
-      filename.toLowerCase() ;                          // Force lowercase
-      if ( filename.endsWith ( ".mp3" ) )               // It is a file, but is it an MP3?
-      {
-        fcount++ ;                                      // Yes, count total number of MP3 files
-        tmpstr = String() ;                             // Empty
-        for ( i = 0 ; i < SD_MAXDEPTH ; i++ )           // Add a line containing the node to SD_outbuf
-        {
-          if ( i )                                      // Need to add separating comma?
-          {
-            tmpstr += String ( "," ) ;                  // Yes, add comma
-          }
-          tmpstr += String ( SD_node[i] ) ;             // Add sequence number
-        }
-        if ( send )                                     // Need to add to string for webinterface?
-        {
-          SD_outbuf += tmpstr +                         // Form line for mp3play_html page
-                       utf8ascii ( file.name() +        // Filename starts after directoryname
-                                   ldirname ) +
-                       String ( "\n" ) ;
-        }
-        SD_nodelist += tmpstr + String ( "\n" ) ;       // Add to nodelist
-        //dbgprint ( "Track: %s",                       // Show debug info
-        //           file.name() + ldirname ) ;
-        if ( SD_outbuf.length() > 1000 )                // Buffer full?
-        {
-          cmdclient.print ( SD_outbuf ) ;               // Yes, send it
-          SD_outbuf = String() ;                        // Clear buffer
-        }
-      }
-    }
-    if ( send )
-    {
-      mp3loop() ;                                       // Keep playing
-    }
-  }
-  if ( fcount != oldfcount )                            // Files in this directory?
-  {
-    SD_outbuf += String ( "-1/ \n" ) ;                  // Spacing in list
-  }
-  if ( SD_outbuf.length() )                             // Flush buffer if not empty
-  {
-    cmdclient.print ( SD_outbuf ) ;                     // Filled, send it
-    SD_outbuf = String() ;                              // Continue with empty buffer
-  }
-  return fcount ;                                       // Return number of MP3s (sofar)
 }
 
 
@@ -1961,6 +1823,7 @@ void IRAM_ATTR isr_IR()
   uint32_t         mask_in = 2 ;                     // Mask input for conversion
   uint16_t         mask_out = 1 ;                    // Mask output for conversion
 
+  ir_intcount++ ;                                    // Test IR input.
   t1 = micros() ;                                    // Get current time
   intval = t1 - t0 ;                                 // Compute interval
   t0 = t1 ;                                          // Save for next compare
@@ -2036,8 +1899,6 @@ void IRAM_ATTR isr_enc_switch()
 }
 
 
-
-
 //**************************************************************************************************
 //                                          I S R _ E N C _ T U R N                                *
 //**************************************************************************************************
@@ -2092,6 +1953,94 @@ void IRAM_ATTR isr_enc_turn()
   }
   old_state = act_state ;                                       // Remember current status
   enc_inactivity = 0 ;
+}
+
+
+//**************************************************************************************************
+//                                S E L E C T N E X T F S N O D E                                  *
+//**************************************************************************************************
+// Select the next or previous mp3 file from USB or SD card.                                       *
+//**************************************************************************************************
+String selectnextFSnode ( int16_t delta )
+{
+#if !defined(ARDUINO_ODROID_ESP32)
+  if ( usb_sd == FS_USB )                             // File system depends on this switch
+  {
+    return selectnextUSBnode ( delta ) ;              // Use USB
+  }
+#endif
+  return selectnextSDnode ( delta ) ;                 // Use SD
+}
+
+
+
+//**************************************************************************************************
+//                                C O N N E C T T O F I L E                                        *
+//**************************************************************************************************
+// Connect to USB or SD file.                                                                      *
+//**************************************************************************************************
+bool connecttofile()
+{
+#if !defined(ARDUINO_ODROID_ESP32)
+  if ( usb_sd == FS_USB )                             // File system depends on this switch
+  {
+    return connecttofile_USB() ;                      // Use USB
+  }
+#endif
+  return connecttofile_SD() ;                         // Use SD
+}
+
+
+
+//**************************************************************************************************
+//                                            R E A D _ F S                                        *
+//**************************************************************************************************
+// Read from filesystem (USB or SD file).                                                          *
+//**************************************************************************************************
+int read_FS ( uint8_t* buf, uint32_t len )
+{
+#if !defined(ARDUINO_ODROID_ESP32)
+  if ( usb_sd == FS_USB )                             // File system depends on this switch
+  {
+    return read_USBDRIVE ( buf, len ) ;               // Use USB
+  }
+#endif
+  return read_SDCARD ( buf, len ) ;                   // Use SD
+}
+
+
+//**************************************************************************************************
+//                                  L I S T F S T R A C K S                                        *
+//**************************************************************************************************
+// Read tracks from filesystem (USB or SD file).                                                   *
+//**************************************************************************************************
+int listfstracks ( const char* dirname, int level = 0, bool send = true )
+{
+#if !defined(ARDUINO_ODROID_ESP32)
+  if ( usb_sd == FS_USB )                             // File system depends on this switch
+  {
+    return listusbtracks ( dirname, level, send ) ;   // Use USB
+  }
+#endif
+  return listsdtracks ( dirname, level, send ) ;      // Use SD
+}
+
+
+//**************************************************************************************************
+//                                G E T _ F S _ N O D E C O U N T                                  *
+//**************************************************************************************************
+// Return the number of nodes on USB/SD.                                                           *
+//**************************************************************************************************
+int get_FS_nodecount()
+{
+#if !defined(ARDUINO_ODROID_ESP32)
+  if ( usb_sd == FS_USB )                             // File system depends on this switch
+  {
+    return USB_nodecount ;                            // Use USB
+  }
+#endif
+  return SD_nodecount ;                               // Use SD
+  
 }
 
 
@@ -2161,6 +2110,19 @@ void showstreamtitle ( const char *ml, bool full )
 
 
 //**************************************************************************************************
+//                                    S E T D A T A M O D E                                        *
+//**************************************************************************************************
+// Change the datamode and show in debug for testing.                                              *
+//**************************************************************************************************
+void setdatamode ( datamode_t newmode )
+{
+  //dbgprint ( "Change datamode from 0x%03X to 0x%03X",
+  //           (int)datamode, (int)newmode ) ;
+  datamode = newmode ;
+}
+
+
+//**************************************************************************************************
 //                                    S T O P _ M P 3 C L I E N T                                  *
 //**************************************************************************************************
 // Disconnect from the server.                                                                     *
@@ -2191,21 +2153,22 @@ bool connecttohost()
   uint16_t    port = 80 ;                           // Port number for host
   String      extension = "/" ;                     // May be like "/mp3" in "skonto.ls.lv:8002/mp3"
   String      hostwoext = host ;                    // Host without extension and portnumber
+  String      auth  ;                               // For basic authentication
+  String      getreq ;                              // Get request
 
   stop_mp3client() ;                                // Disconnect if still connected
   dbgprint ( "Connect to new host %s", host.c_str() ) ;
-#if defined(ARDUINO_ODROID_ESP32)
-  // tftset ( 0, "ODROID-GO-Radio" );
-#else
+#if !defined(ARDUINO_ODROID_ESP32)
   tftset ( 0, "ESP32-Radio" ) ;                     // Set screen segment text top line
-#endif
+  tftset ( 1, "" ) ;                                // Clear song and artist
   displaytime ( "" ) ;                              // Clear time on TFT screen
-  datamode = INIT ;                                 // Start default in metamode
+#endif
+  setdatamode ( INIT ) ;                            // Start default in metamode
   chunked = false ;                                 // Assume not chunked
   if ( host.endsWith ( ".m3u" ) )                   // Is it an m3u playlist?
   {
     playlist = host ;                               // Save copy of playlist URL
-    datamode = PLAYLISTINIT ;                       // Yes, start in PLAYLIST mode
+    setdatamode ( PLAYLISTINIT ) ;                  // Yes, start in PLAYLIST mode
     if ( playlist_num == 0 )                        // First entry to play?
     {
       playlist_num = 1 ;                            // Yes, set index
@@ -2231,16 +2194,30 @@ bool connecttohost()
   if ( mp3client.connect ( hostwoext.c_str(), port ) )
   {
     dbgprint ( "Connected to server" ) ;
-    // This will send the request to the server. Request metadata.
-    mp3client.print ( String ( "GET " ) +
-                      extension +
-                      String ( " HTTP/1.1\r\n" ) +
-                      String ( "Host: " ) +
-                      hostwoext +
-                      String ( "\r\n" ) +
-                      String ( "Icy-MetaData:1\r\n" ) +
-                      String ( "Connection: close\r\n\r\n" ) ) ;
-    return true ;
+    if ( nvssearch ( "basicauth" ) )                // Does "basicauth" exists?
+    {
+      auth = nvsgetstr ( "basicauth" ) ;            // Use basic authentication?
+      if ( auth != "" )                             // Should be user:passwd
+      { 
+         auth = base64::encode ( auth.c_str() ) ;   // Encode
+         auth = String ( "Authorization: Basic " ) +
+                auth + String ( "\r\n" ) ;
+      }
+    }
+    getreq = String ( "GET " ) +                            // Format get request
+             extension +
+             String ( " HTTP/1.0\r\n" ) +
+             String ( "Host: " ) +
+             hostwoext +
+             String ( "\r\n" ) +
+             String ( "Icy-MetaData: 1\r\n" ) +
+             auth +
+             String ( "Connection: close\r\n\r\n" ) ;
+    mp3client.print ( getreq ) ;                            // Send get request
+#if !defined(ARDUINO_ODROID_ESP32)
+    vTaskDelay ( 1000 / portTICK_PERIOD_MS ) ;              // Give some time to react
+#endif
+    return true ;                                           // Send is probably okay
   }
   dbgprint ( "Request %s failed!", host.c_str() ) ;
   return false ;
@@ -2267,139 +2244,6 @@ uint32_t ssconv ( const uint8_t* bytes )
 
 
 //**************************************************************************************************
-//                                  H A N D L E _ I D 3                                            *
-//**************************************************************************************************
-// Check file on SD card for ID3 tags and use them to display some info.                           *
-// Extended headers are not parsed.                                                                *
-//**************************************************************************************************
-void handle_ID3 ( String &path )
-{
-  char*  p ;                                                // Pointer to filename
-  struct ID3head_t                                          // First part of ID3 info
-  {
-    char    fid[3] ;                                        // Should be filled with "ID3"
-    uint8_t majV, minV ;                                    // Major and minor version
-    uint8_t hflags ;                                        // Headerflags
-    uint8_t ttagsize[4] ;                                   // Total tag size
-  } ID3head ;
-  uint8_t  exthsiz[4] ;                                     // Extended header size
-  uint32_t stx ;                                            // Ext header size converted
-  uint32_t sttg ;                                           // Total tagsize converted
-  uint32_t stg ;                                            // Size of a single tag
-  struct ID3tag_t                                           // Tag in ID3 info
-  {
-    char    tagid[4] ;                                      // Things like "TCON", "TYER", ...
-    uint8_t tagsize[4] ;                                    // Size of the tag
-    uint8_t tagflags[2] ;                                   // Tag flags
-  } ID3tag ;
-  uint8_t  tmpbuf[4] ;                                      // Scratch buffer
-  uint8_t  tenc ;                                           // Text encoding
-  String   albttl = String() ;                              // Album and title
-
-  tftset ( 2, "Playing from local file" ) ;                 // Assume no ID3
-  p = (char*)path.c_str() + 1 ;                             // Point to filename
-  showstreamtitle ( p, true ) ;                             // Show the filename as title (middle part)
-  mp3file = SD.open ( path ) ;                              // Open the file
-  mp3file.read ( (uint8_t*)&ID3head, sizeof(ID3head) ) ;    // Read first part of ID3 info
-  if ( strncmp ( ID3head.fid, "ID3", 3 ) == 0 )
-  {
-    sttg = ssconv ( ID3head.ttagsize ) ;                    // Convert tagsize
-    dbgprint ( "Found ID3 info" ) ;
-    if ( ID3head.hflags & 0x40 )                            // Extended header?
-    {
-      stx = ssconv ( exthsiz ) ;                            // Yes, get size of extended header
-      while ( stx-- )
-      {
-        mp3file.read () ;                                   // Skip next byte of extended header
-      }
-    }
-    while ( sttg > 10 )                                     // Now handle the tags
-    {
-      sttg -= mp3file.read ( (uint8_t*)&ID3tag,
-                             sizeof(ID3tag) ) ;             // Read first part of a tag
-      if ( ID3tag.tagid[0] == 0 )                           // Reached the end of the list?
-      {
-        break ;                                             // Yes, quit the loop
-      }
-      stg = ssconv ( ID3tag.tagsize ) ;                     // Convert size of tag
-      if ( ID3tag.tagflags[1] & 0x08 )                      // Compressed?
-      {
-        sttg -= mp3file.read ( tmpbuf, 4 ) ;               // Yes, ignore 4 bytes
-        stg -= 4 ;                                         // Reduce tag size
-      }
-      if ( ID3tag.tagflags[1] & 0x044 )                     // Encrypted or grouped?
-      {
-        sttg -= mp3file.read ( tmpbuf, 1 ) ;               // Yes, ignore 1 byte
-        stg-- ;                                            // Reduce tagsize by 1
-      }
-      if ( stg > ( sizeof(metalinebf) + 2 ) )               // Room for tag?
-      {
-        break ;                                             // No, skip this and further tags
-      }
-      sttg -= mp3file.read ( (uint8_t*)metalinebf,
-                             stg ) ;                        // Read tag contents
-      metalinebf[stg] = '\0' ;                              // Add delimeter
-      tenc = metalinebf[0] ;                                // First byte is encoding type
-      if ( tenc == '\0' )                                   // Debug all tags with encoding 0
-      {
-        dbgprint ( "ID3 %s = %s", ID3tag.tagid,
-                   metalinebf + 1 ) ;
-      }
-      if ( ( strncmp ( ID3tag.tagid, "TALB", 4 ) == 0 ) ||  // Album title
-           ( strncmp ( ID3tag.tagid, "TPE1", 4 ) == 0 ) )   // or artist?
-      {
-        albttl += String ( metalinebf + 1 ) ;               // Yes, add to string
-        if ( displaytype == T_NEXTION )                     // NEXTION display?
-        {
-          albttl += String ( "\\r" ) ;                      // Add code for newline (2 characters)
-        }
-        else
-        {
-          albttl += String ( "\n" ) ;                       // Add newline (1 character)
-        }
-      }
-      if ( strncmp ( ID3tag.tagid, "TIT2", 4 ) == 0 )       // Songtitle?
-      {
-        tftset ( 2, metalinebf + 1 ) ;                      // Yes, show title
-      }
-    }
-    tftset ( 1, albttl ) ;                                  // Show album and title
-  }
-  mp3file.close() ;                                         // Close the file
-  mp3file = SD.open ( path ) ;                              // And open the file again
-}
-
-
-//**************************************************************************************************
-//                                       C O N N E C T T O F I L E                                 *
-//**************************************************************************************************
-// Open the local mp3-file.                                                                        *
-//**************************************************************************************************
-bool connecttofile()
-{
-  String path ;                                           // Full file spec
-
-  tftset ( 0, "ESP32 MP3 Player" ) ;                      // Set screen segment top line
-  displaytime ( "" ) ;                                    // Clear time on TFT screen
-  path = host.substring ( 9 ) ;                           // Path, skip the "localhost" part
-  claimSPI ( "sdopen3" ) ;                                // Claim SPI bus
-  handle_ID3 ( path ) ;                                   // See if there are ID3 tags in this file
-  mp3filelength = mp3file.available() ;                   // Get length
-  releaseSPI() ;                                          // Release SPI bus
-  if ( !mp3file )
-  {
-    dbgprint ( "Error opening file %s", path.c_str() ) ;  // No luck
-    return false ;
-  }
-  mqttpub.trigger ( MQTT_STREAMTITLE ) ;                  // Request publishing to MQTT
-  icyname = "" ;                                          // No icy name yet
-  chunked = false ;                                       // File not chunked
-  metaint = 0 ;                                           // No metadata
-  return true ;
-}
-
-
-//**************************************************************************************************
 //                                       C O N N E C T W I F I                                     *
 //**************************************************************************************************
 // Connect to WiFi using the SSID's available in wifiMulti.                                        *
@@ -2415,58 +2259,37 @@ bool connectwifi()
 
   WifiInfo_t winfo ;                                    // Entry from wifilist
 
-  WiFi.disconnect() ;                                   // After restart the router could
-  delay(100);
-  WiFi.softAPdisconnect(true) ;                         // still keep the old connection
-#if defined(ARDUINO_ODROID_ESP32)
-  WiFi.mode(WIFI_OFF);
-#endif
+  WiFi.disconnect ( true ) ;                            // After restart the router could
+  WiFi.softAPdisconnect ( true ) ;                      // still keep the old connection
+  vTaskDelay ( 1000 / portTICK_PERIOD_MS ) ;            // Silly things to start connection
+  WiFi.mode ( WIFI_STA ) ;
+  vTaskDelay ( 1000 / portTICK_PERIOD_MS ) ;
   if ( wifilist.size()  )                               // Any AP defined?
   {
-    WiFi.disconnect(true);
     if ( wifilist.size() == 1 )                         // Just one AP defined in preferences?
     {
       winfo = wifilist[0] ;                             // Get this entry
       WiFi.begin ( winfo.ssid, winfo.passphrase ) ;     // Connect to single SSID found in wifi_xx
-      dbgprint ( "Try WiFi %s:>%s<", winfo.ssid, winfo.passphrase ) ;          // Message to show during WiFi connect
-      if (  WiFi.waitForConnectResult() != WL_CONNECTED )  { // Try to connect again  
-        WiFi.disconnect(true);
-        WiFi.begin ( winfo.ssid, winfo.passphrase ) ;     // Connect to single SSID found in wifi_xx
-        dbgprint ( "Try WiFi again %s:>%s<", winfo.ssid, winfo.passphrase ) ;          // Message to show during WiFi connect
-
-       }
+      dbgprint ( "Try WiFi %s", winfo.ssid ) ;          // Message to show during WiFi connect
     }
     else                                                // More AP to try
     {
       wifiMulti.run() ;                                 // Connect to best network
-      if (  WiFi.waitForConnectResult() != WL_CONNECTED ) // Try to connect again {
-            WiFi.disconnect(true);
-            delay(100);
-            wifiMulti.run() ;
-        }
-      if (  WiFi.waitForConnectResult() != WL_CONNECTED ) // Try to connect
-      {
-
-        localAP = true ;                                  // Error, setup own AP
-      }
-#if defined(ARDUINO_ODROID_ESP32)
-      else
-        WiFi.mode(WIFI_STA);
-#endif
-
     }
+    if (  WiFi.waitForConnectResult() != WL_CONNECTED ) // Try to connect
+    {
+      localAP = true ;                                  // Error, setup own AP
+    }
+  }
   else
   {
-    dbgprint ( "No WiFi defined!") ;          // Message to show during WiFi connect
     localAP = true ;                                    // Not even a single AP defined
   }
-
   if ( localAP )                                        // Must setup local AP?
   {
     dbgprint ( "WiFi Failed!  Trying to setup AP with name %s and password %s.", NAME, NAME ) ;
     WiFi.softAP ( NAME, NAME ) ;                        // This ESP will be an AP
     pfs = dbgprint ( "IP = 192.168.4.1" ) ;             // Address for AP
-    WiFi.mode(WIFI_AP);
   }
   else
   {
@@ -2476,11 +2299,8 @@ bool connectwifi()
     pfs = dbgprint ( "IP = %s", ipaddress.c_str() ) ;   // String to dispay on TFT
   }
   tftlog ( pfs ) ;                                      // Show IP
-//  delay ( 3000 ) ;                                      // Allow user to read this
-#if not defined(ARDUINO_ODROID_ESP32)
-  //disable annoying char on ODROID Display
-  tftlog ( "\f" ) ;                                     // Select new page if NEXTION 
-#endif
+  //delay ( 3000 ) ;                                      // Allow user to read this
+  //tftlog ( "\f" ) ;                                     // Select new page if NEXTION 
   return ( localAP == false ) ;                         // Return result of connection
 }
 
@@ -2711,21 +2531,27 @@ void update_software ( const char* lstmodkey, const char* updatehost, const char
 //**************************************************************************************************
 // Read the mp3 host from the preferences specified by the parameter.                              *
 // The host will be returned.                                                                      *
+// We search for "preset_x" or "preset_xx" or "preset_xxx".                       *
 //**************************************************************************************************
-String readhostfrompref ( int8_t preset )
+String readhostfrompref ( int16_t preset )
 {
-  char           tkey[12] ;                            // Key as an array of chars
+  char           tkey[12] ;                            // Key as an array of char
 
-  sprintf ( tkey, "preset_%02d", preset ) ;            // Form the search key
-  if ( nvssearch ( tkey ) )                            // Does it exists?
+  sprintf ( tkey, "preset_%d", preset ) ;              // Form the search key
+  if ( !nvssearch ( tkey ) )                           // Does _x[x[x]] exists?
   {
-    // Get the contents
-    return nvsgetstr ( tkey ) ;                        // Get the station (or empty sring)
+    sprintf ( tkey, "preset_%03d", preset ) ;          // Form new search key
+    if ( !nvssearch ( tkey ) )                         // Does _xxx exists?
+    {
+      sprintf ( tkey, "preset_%02d", preset ) ;        // Form new search key
+    }
+    if ( !nvssearch ( tkey ) )                         // Does _xx exists?
+    {
+      return String ( "" ) ;                           // Not found
+    }
   }
-  else
-  {
-    return String ( "" ) ;                             // Not found
-  }
+  // Get the contents
+  return nvsgetstr ( tkey ) ;                          // Get the station (or empty sring)
 }
 
 
@@ -2742,11 +2568,11 @@ String readhostfrompref()
 
   while ( ( contents = readhostfrompref ( ini_block.newpreset ) ) == "" )
   {
-    if ( ++ maxtry > 99 )
+    if ( ++maxtry >= MAXPRESETS )
     {
       return "" ;
     }
-    if ( ++ini_block.newpreset > 99 )                   // Next or wrap to 0
+    if ( ++ini_block.newpreset >= MAXPRESETS )          // Next or wrap to 0
     {
       ini_block.newpreset = 0 ;
     }
@@ -2763,6 +2589,7 @@ String readhostfrompref()
 //**************************************************************************************************
 void readprogbuttons()
 {
+#if !defined(ARDUINO_ODROID_ESP32)
   char        mykey[20] ;                                   // For numerated key
   int8_t      pinnr ;                                       // GPIO pinnumber to fill
   int         i ;                                           // Loop control
@@ -2813,6 +2640,10 @@ void readprogbuttons()
       }
     }
   }
+#else
+  digitalWrite(2, LOW);
+  pinMode(2, OUTPUT);  
+#endif
 }
 
 
@@ -2879,10 +2710,11 @@ void readIOprefs()
     { "pin_tft_sda",   &ini_block.tft_sda_pin,      -1 }, // Display I2C version
     { "pin_tft_bl",    &ini_block.tft_bl_pin,       -1 }, // Display backlight
     { "pin_tft_blx",   &ini_block.tft_blx_pin,      -1 }, // Display backlight (inversed logic)
-    { "pin_shutdownx", &ini_block.vs_shutdownx_pin, -1 }, // Amplifier shut-down pin (inversed logic)
+    { "pin_ch376_cs",  &ini_block.ch376_cs_pin,     -1 }, // CH376 CS for USB interface
+    { "pin_ch376_int", &ini_block.ch376_int_pin,    -1 }, // CH376 INT for USB interfce
     { "pin_shutdown",  &ini_block.vs_shutdown_pin,  -1 }, // Amplifier shut-down pin
-
-    
+    { "pin_shutdownx", &ini_block.vs_shutdownx_pin, -1 }, // Amplifier shut-down pin (inversed logic)
+#if defined(ARDUINO_ODROID_ESP32)
     { "pin_spi_sck",   &ini_block.spi_sck_pin,      18 },
     { "pin_spi_miso",  &ini_block.spi_miso_pin,     19 },
     { "pin_spi_mosi",  &ini_block.spi_mosi_pin,     23 },
@@ -2891,8 +2723,16 @@ void readIOprefs()
     { "pin_vs_cs",     &ini_block.vs_cs_pin,        12 },
     { "pin_vs_dcs",    &ini_block.vs_dcs_pin,       15 },
     { "pin_tft_cs",    &ini_block.tft_cs_pin,       5 },
-    
-
+#else        
+    { "pin_spi_sck",   &ini_block.spi_sck_pin,      18 },
+    { "pin_spi_miso",  &ini_block.spi_miso_pin,     19 },
+    { "pin_spi_mosi",  &ini_block.spi_mosi_pin,     23 },
+    { "pin_sd_cs",     &ini_block.sd_cs_pin,        -1 },
+    { "pin_vs_dreq",   &ini_block.vs_dreq_pin,      -1 },
+    { "pin_vs_cs",     &ini_block.vs_cs_pin,        -1 }, // VS1053 pins
+    { "pin_vs_dcs",    &ini_block.vs_dcs_pin,       -1 },
+    { "pin_tft_cs",    &ini_block.tft_cs_pin,       -1 }, // Display SPI version
+#endif
     { NULL,            NULL,                        0  }  // End of list
   } ;
   int         i ;                                         // Loop control
@@ -2900,13 +2740,11 @@ void readIOprefs()
   String      val ;                                       // Contents of preference entry
   int8_t      ival ;                                      // Value converted to integer
   int8_t*     p ;                                         // Points to variable
-
   for ( i = 0 ; klist[i].gname ; i++ )                    // Loop trough all I/O related keys
   {
     p = klist[i].gnr ;                                    // Point to target variable
     ival = klist[i].pdefault ;                            // Assume pin number to be the default
-#if not defined(ARDUINO_ODROID_ESP32)
-//not possible on ODROID-GO, always keep default pinvalues
+#if !defined(ARDUINO_ODROID_ESP32)
     if ( nvssearch ( klist[i].gname ) )                   // Does it exist?
     {
       val = nvsgetstr ( klist[i].gname ) ;                // Read value of key
@@ -3003,7 +2841,7 @@ bool mqttreconnect()
   static uint32_t retrytime = 0 ;                         // Limit reconnect interval
   bool            res = false ;                           // Connect result
   char            clientid[20] ;                          // Client ID
-  char            subtopic[20] ;                          // Topic to subscribe
+  char            subtopic[60] ;                          // Topic to subscribe
 
   if ( ( millis() - retrytime ) < 5000 )                  // Don't try to frequently
   {
@@ -3314,10 +3152,7 @@ void  mk_lsan()
                    lssid.c_str() ) ;
         winfo.inx = i ;                                  // Create new element for wifilist ;
         winfo.ssid = strdup ( lssid.c_str() ) ;          // Set ssid of element
-        winfo.passphrase = strdup ( lpw.c_str() );
-
-        dbgprint("Passwort: %s", winfo.passphrase); 
-        
+        winfo.passphrase = strdup ( lpw.c_str() ) ;
         wifilist.push_back ( winfo ) ;                   // Add to list
         wifiMulti.addAP ( winfo.ssid,                    // Add to wifi acceptable network list
                           winfo.passphrase ) ;
@@ -3365,16 +3200,13 @@ void getsettings()
   String              val ;                              // Result to send
   String              statstr ;                          // Station string
   int                 inx ;                              // Position of search char in line
-  int                 i ;                                // Loop control, preset number
-  char                tkey[12] ;                         // Key for preset preference
+  int16_t             i ;                                // Loop control, preset number
 
-  for ( i = 0 ; i < 100 ; i++ )                          // Max 99 presets
+  for ( i = 0 ; i < MAXPRESETS ; i++ )                   // Max number of presets
   {
-    sprintf ( tkey, "preset_%02d", i ) ;                 // Preset plus number
-    if ( nvssearch ( tkey ) )                            // Does it exists?
+    statstr = readhostfrompref ( i ) ;                   // Get the preset from NVS
+    if ( statstr != "" )                                 // Preset available?
     {
-      // Get the contents
-      statstr = nvsgetstr ( tkey ) ;                     // Get the station
       // Show just comment if available.  Otherwise the preset itself.
       inx = statstr.indexOf ( "#" ) ;                    // Get position of "#"
       if ( inx > 0 )                                     // Hash sign present?
@@ -3382,7 +3214,9 @@ void getsettings()
         statstr.remove ( 0, inx + 1 ) ;                  // Yes, remove non-comment part
       }
       chomp ( statstr ) ;                                // Remove garbage from description
-      val += String ( tkey ) +
+      dbgprint ( "statstr is %s", statstr.c_str() ) ;
+      val += String ( "preset_" ) +
+             String ( i ) +
              String ( "=" ) +
              statstr +
              String ( "\n" ) ;                           // Add delimeter
@@ -3575,26 +3409,38 @@ void setup()
   if ( index_html_version   < 180102 ) dbgprint ( wvn, "index" ) ;
   if ( mp3play_html_version < 180918 ) dbgprint ( wvn, "mp3play" ) ;
   if ( defaultprefs_version < 180816 ) dbgprint ( wvn, "defaultprefs" ) ;
+#if !defined(ARDUINO_ODROID_ESP32)
+  if ( search_html_version  < 210215 ) dbgprint ( wvn, "searchprefs" ) ;
+#endif
   // Print some memory and sketch info
   dbgprint ( "Starting ESP32-radio running on CPU %d at %d MHz.  Version %s.  Free memory %d",
              xPortGetCoreID(),
              ESP.getCpuFreqMHz(),
              VERSION,
              ESP.getFreeHeap() ) ;                       // Normally about 170 kB
-#if defined( BLUETFT )
+#if defined ( BLUETFT )                                // Report display option
   dbgprint ( dtyp, "BLUETFT" ) ;
 #endif
 #if defined ( ILI9341 )                                // Report display option
   dbgprint ( dtyp, "ILI9341" ) ;
 #endif
-#if defined ( OLED )
-  dbgprint ( dtyp, "OLED" ) ;
+#if defined ( OLED1306 )
+  dbgprint ( dtyp, "OLED1306" ) ;
+#endif
+#if defined ( OLED1309 )
+  dbgprint ( dtyp, "OLED1309" ) ;
+#endif
+#if defined ( OLED1106 )
+  dbgprint ( dtyp, "OLED1106" ) ;
 #endif
 #if defined ( DUMMYTFT )
   dbgprint ( dtyp, "DUMMYTFT" ) ;
 #endif
 #if defined ( LCD1602I2C )
   dbgprint ( dtyp, "LCD1602" ) ;
+#endif
+#if defined ( LCD2004I2C )
+  dbgprint ( dtyp, "LCD2004" ) ;
 #endif
 #if defined ( NEXTION )
   dbgprint ( dtyp, "NEXTION" ) ;
@@ -3628,7 +3474,7 @@ void setup()
   ini_block.bat0 = 0 ;                                   // Battery ADC levels not yet defined
   ini_block.bat100 = 0 ;
   readIOprefs() ;                                        // Read pins used for SPI, TFT, VS1053, IR,
-  // Rotary encoder
+                                                         // Rotary encoder
   for ( i = 0 ; (pinnr = progpin[i].gpio) >= 0 ; i++ )   // Check programmable input pins
   {
     pinMode ( pinnr, INPUT_PULLUP ) ;                    // Input for control button
@@ -3645,14 +3491,19 @@ void setup()
     dbgprint ( "GPIO%d is %s", pinnr, p ) ;
   }
   readprogbuttons() ;                                    // Program the free input pins
+  dbgprint("SPI.begin");
   SPI.begin ( ini_block.spi_sck_pin,                     // Init VSPI bus with default or modified pins
               ini_block.spi_miso_pin,
               ini_block.spi_mosi_pin ) ;
+  dbgprint("SPI.begin done");
+  
   vs1053player = new VS1053 ( ini_block.vs_cs_pin,       // Make instance of player
                               ini_block.vs_dcs_pin,
                               ini_block.vs_dreq_pin,
                               ini_block.vs_shutdown_pin,
                               ini_block.vs_shutdownx_pin ) ;
+  vs1053player->streamMode ( true ) ;                    // Set streammode (experimental)
+#if !defined(ARDUINO_ODROID_ESP32)
   if ( ini_block.ir_pin >= 0 )
   {
     dbgprint ( "Enable pin %d for IR",
@@ -3663,12 +3514,10 @@ void setup()
   }
   if ( ( ini_block.tft_cs_pin >= 0  ) ||                 // Display configured?
        ( ini_block.tft_scl_pin >= 0 ) )
+#endif  
   {
     dbgprint ( "Start display" ) ;
     if ( dsp_begin() )                                   // Init display
-#if defined(ARDUINO_ODROID_ESP32)
-    //within dsp_begin() also the keys of the odroid will be initialized
-#endif
     {
       dsp_setRotation() ;                                // Use landscape format
       dsp_erase() ;                                      // Clear screen
@@ -3684,8 +3533,8 @@ void setup()
       dsp_println ( tmpstr ) ;
       dsp_println ( "By Ed Smallenburg" ) ;
 #if defined(ARDUINO_ODROID_ESP32)
-      dsp_println ( "ODROID-port: Erik Foltin");
-#endif 
+      dsp_println ( "Odroid-Port: Erik Foltin" ) ;                           // Top of screen
+#endif      
       dsp_update() ;                                     // Show on physical screen
     }
   }
@@ -3698,52 +3547,23 @@ void setup()
     pinMode ( ini_block.tft_blx_pin, OUTPUT ) ;          // Yes, enable output
   }
   blset ( true ) ;                                       // Enable backlight (if configured)
-  if ( ini_block.sd_cs_pin >= 0 )                        // SD configured?
-  {
-    if ( !SD.begin ( ini_block.sd_cs_pin, SPI,           // Yes,
-                     SDSPEED ) )                         // try to init SD card driver
-    {
-      p = dbgprint ( "SD Card Mount Failed!" ) ;         // No success, check formatting (FAT)
-      tftlog ( p ) ;                                     // Show error on TFT as well
-    }
-    else
-    {
-#if defined(ARDUINO_ODROID_ESP32)
-extern bool ignoreSD();
-      if (!ignoreSD())
-        SD_okay = ( SD.cardType() != CARD_NONE ) ;         // See if known card
-      else
-        dbgprint("SD card switched off for OdroidRadio!");
-#else      
-      SD_okay = ( SD.cardType() != CARD_NONE ) ;         // See if known card
-#endif
-      if ( !SD_okay )
-      {
-        p = dbgprint ( "No SD card attached" ) ;         // Card not readable
-        tftlog ( p ) ;                                   // Show error on TFT as well
-      }
-      else
-      {
-        dbgprint ( "Locate mp3 files on SD, may take a while..." ) ;
-        tftlog ( "Read SD card" ) ;
-        SD_nodecount = listsdtracks ( "/", 0, false ) ;  // Build nodelist
-        p = dbgprint ( "%d tracks on SD", SD_nodecount ) ;
-        tftlog ( p ) ;                                   // Show number of tracks on TFT
-      }
-    }
-  }
-  mk_lsan() ;                                            // Make al list of acceptable networks
-  // in preferences.
-  WiFi.mode ( WIFI_STA ) ;                               // This ESP is a station
-  WiFi.persistent ( false ) ;                            // Do not save SSID and password
+  setup_SDCARD() ;                                       // Set-up SD card (if configured)
+  mk_lsan() ;                                            // Make a list of acceptable networks
+                                                         // in preferences.
   WiFi.disconnect() ;                                    // After restart router could still
-  delay ( 100 ) ;                                        // keep old connection
-  listNetworks() ;                                       // Search for WiFi networks
+  delay ( 500 ) ;                                        // keep old connection
+  WiFi.mode ( WIFI_STA ) ;                               // This ESP is a station
+  delay ( 500 ) ;                                        // ??
+  WiFi.persistent ( false ) ;                            // Do not save SSID and password
+  listNetworks() ;                                       // Find WiFi networks
   readprefs ( false ) ;                                  // Read preferences
-  tcpip_adapter_set_hostname ( TCPIP_ADAPTER_IF_STA, NAME ) ;
-  dbgprint("Init vs1053player starts after %ld msecs", millis());
-  vs1053player->begin() ;                                 // Initialize VS1053 player
+  tcpip_adapter_set_hostname ( TCPIP_ADAPTER_IF_STA,
+                               NAME ) ;
+  vs1053player->begin() ;                                // Initialize VS1053 player
   delay(10);
+#if !defined(ARDUINO_ODROID_ESP32)
+  setup_CH376() ;                                        // Init CH376 if configured
+#endif
   p = dbgprint ( "Connect to WiFi" ) ;                   // Show progress
   tftlog ( p ) ;                                         // On TFT too
   NetworkFound = connectwifi() ;                         // Connect to WiFi network
@@ -3791,7 +3611,7 @@ extern bool ignoreSD();
   timerAttachInterrupt ( timer, &timer100, true ) ;      // Call timer100() on timer alarm
   timerAlarmWrite ( timer, 100000, true ) ;              // Alarm every 100 msec
   timerAlarmEnable ( timer ) ;                           // Enable the timer
-  delay ( 1000 ) ;                                       // Show IP for a while
+  //delay ( 1000 ) ;                                       // Show IP for a while
   configTime ( ini_block.clk_offset * 3600,
                ini_block.clk_dst * 3600,
                ini_block.clk_server.c_str() ) ;          // GMT offset, daylight offset in seconds
@@ -3815,14 +3635,13 @@ extern bool ignoreSD();
   {
     gettime() ;                                           // Sync time
   }
+  
   if ( tft )
   {
-#if defined(ARDUINO_ODROID_ESP32)
-    dsp_fillRect ( 0, 8 + tftdata[0].y,                                  // Clear most of the screen
-                   dsp_getwidth(),
-                   dsp_getheight() - 8 - tftdata[0].y, BLACK ) ;
-    dsp_setCursor ( 0, tftdata[1].y ) ;                           // Top of screen
-#else  
+#if defined (ARDUINO_ODROID_ESP32)
+extern void odroidSetup2(void);
+    odroidSetup2();   
+#else
     dsp_fillRect ( 0, 8,                                  // Clear most of the screen
                    dsp_getwidth(),
                    dsp_getheight() - 8, BLACK ) ;
@@ -3982,9 +3801,9 @@ void handlehttpreply()
   String        sndstr = "" ;                               // String to send
   int           n ;                                         // Number of files on SD card
 
-  if ( http_reponse_flag )
+  if ( http_response_flag )
   {
-    http_reponse_flag = false ;
+    http_response_flag = false ;
     if ( cmdclient.connected() )
     {
       if ( http_rqfile.length() == 0 &&                     // An empty "GET"?
@@ -4001,16 +3820,14 @@ void handlehttpreply()
       }
       else
       {
-#if defined(ARDUINO_ODROID_ESP32)
+ #if defined(ARDUINO_ODROID_ESP32)
         if ( http_rqfile.startsWith("genre" ))
         {
           //dbgprint("Running GENRE(%s) with command: %s", http_rqfile.c_str(), http_getcmd.c_str());
           httpHandleGenre ( http_rqfile, http_getcmd ) ;
         }
         else
-#endif
-        
-
+#endif       
         if ( http_getcmd.length() )                         // Command to analyze?
         {
           dbgprint ( "Send reply for %s", http_getcmd.c_str() ) ;
@@ -4019,7 +3836,7 @@ void handlehttpreply()
           {
             if ( datamode != STOPPED )                      // Still playing?
             {
-              datamode = STOPREQD ;                         // Stop playing
+              setdatamode (  STOPREQD ) ;                   // Stop playing
             }
             sndstr += readprefs ( true ) ;                  // Read and send
           }
@@ -4030,16 +3847,17 @@ void handlehttpreply()
           else if ( http_getcmd.startsWith ("saveprefs") )  // Is is a "Save preferences"
           {
             writeprefs() ;                                  // Yes, handle it
+            sndstr += String ( "Config saved" ) ;           // Give reply
           }
           else if ( http_getcmd.startsWith ( "mp3list" ) )  // Is is a "Get SD MP3 tracklist"?
           {
             if ( datamode != STOPPED )                      // Still playing?
             {
-              datamode = STOPREQD ;                         // Stop playing
+              setdatamode ( STOPREQD ) ;                    // Stop playing
             }
             cmdclient.print ( sndstr ) ;                    // Yes, send header
-            n = listsdtracks ( "/" ) ;                      // Handle it
-            dbgprint ( "%d tracks found on SD card", n ) ;
+            n = listfstracks ( "/", 0, true ) ;             // Handle it
+            dbgprint ( "%d tracks on local drive", n ) ;
             return ;                                        // Do not send empty line
           }
           else if ( http_getcmd.startsWith ( "settings" ) ) // Is is a "Get settings" (like presets and tone)?
@@ -4103,7 +3921,7 @@ void handlehttp()
       // that's the end of the client HTTP request, so send a response:
       if ( currentLine.length() == 0 )
       {
-        http_reponse_flag = reqseen ;                        // Response required or not
+        http_response_flag = reqseen ;                       // Response required or not
         break ;
       }
       else
@@ -4215,7 +4033,7 @@ String xmlgethost  ( String mount )
 
   stop_mp3client() ; // Stop any current wificlient connections.
   dbgprint ( "Connect to new iHeartRadio host: %s", mount.c_str() ) ;
-  datamode = INIT ;                                   // Start default in metamode
+  setdatamode ( INIT ) ;                            // Start default in metamode
   chunked = false ;                                   // Assume not chunked
   sprintf ( tmpstr, xmlget, mount.c_str() ) ;         // Create a GET commmand for the request
   dbgprint ( "%s", tmpstr ) ;
@@ -4339,6 +4157,27 @@ void handleVolPub()
 }
 
 
+//**************************************************************************************************
+//                                     G E T F S F I L E N A M E                                   *
+//**************************************************************************************************
+// Get filename for a node ID.  Search on SD or USB.                                               *
+//**************************************************************************************************
+String getFSfilename ( String &nodeID )
+{
+#if !defined(ARDUINO_ODROID_ESP32)
+  if ( ( usb_sd == FS_USB ) && USB_okay )              // File system depends on this switch
+  {
+    return getUSBfilename ( nodeID ) ;                 // like "localhost/........"
+  }
+  else 
+#endif  
+  if ( ( usb_sd == FS_SD ) && SD_okay )
+  {
+    return getSDfilename ( nodeID ) ;                  // like "localhost/........"
+  }
+  return String ( "" ) ;                               // Not found
+}
+
 
 //**************************************************************************************************
 //                                           C H K _ E N C                                         *
@@ -4352,6 +4191,7 @@ void chk_enc()
   static String  enc_filename ;                               // Filename of selected track
   String         tmp ;                                        // Temporary string
   int16_t        inx ;                                        // Position in string
+  String         rt = "0" ;                                   // NodeID for random track
 
   if ( enc_menu_mode != VOLUME )                              // In default mode?
   {
@@ -4377,13 +4217,13 @@ void chk_enc()
   {
     dbgprint ( "Triple click") ;
     tripleclick = false ;
-    if ( SD_nodecount )                                       // Tracks on SD?
+    if ( get_FS_nodecount() )                                 // Tracks on FS?
     {
       enc_menu_mode = TRACK ;                                 // Swich to TRACK mode
       dbgprint ( "Encoder mode set to TRACK" ) ;
       tftset ( 3, "Turn to select track\n"                    // Show current option
                "Press to confirm" ) ;
-      enc_nodeID = selectnextSDnode ( SD_currentnode, +1 ) ;  // Start with next file on SD
+      enc_nodeID = selectnextFSnode ( +1 ) ;                  // Start with next file on SD/USB
       if ( enc_nodeID == "" )                                 // Current track available?
       {
         inx = SD_nodelist.indexOf ( "\n" ) ;                  // No, find first
@@ -4392,7 +4232,7 @@ void chk_enc()
       // Stop playing as reading filenames saturates SD I/O.
       if ( datamode != STOPPED )
       {
-        datamode = STOPREQD ;                                 // Request STOP
+        setdatamode ( STOPREQD ) ;                            // Request STOP
       }
     }
   }
@@ -4442,15 +4282,16 @@ void chk_enc()
     dbgprint ( "Long click") ;
     if ( datamode != STOPPED )
     {
-      datamode = STOPREQD ;                                   // Request STOP, do not touch logclick flag
+      setdatamode ( STOPREQD ) ;                              // Request STOP, do not touch logclick flag
     }
     else
     {
       longclick = false ;                                     // Reset condition
       dbgprint ( "Long click detected" ) ;
-      if ( SD_nodecount )                                     // Tracks on SD?
+      if ( get_FS_nodecount() )                               // Tracks on FS?
       {
-        host = getSDfilename ( "0" ) ;                        // Get random track
+        dbgprint ( "getFSfilename random choice" ) ;
+        host = getFSfilename ( rt ) ;                         // Get random track
         hostreq = true ;                                      // Request this host
       }
       muteflag = false ;                                      // Be sure muteing is off
@@ -4504,9 +4345,8 @@ void chk_enc()
       tftset ( 3, tmp ) ;                                     // Set screen segment bottom part
       break ;
     case TRACK :
-      enc_nodeID = selectnextSDnode ( enc_nodeID,
-                                      rotationcount ) ;       // Select the next file on SD
-      enc_filename = getSDfilename ( enc_nodeID ) ;           // Set new filename
+      enc_nodeID = selectnextFSnode ( rotationcount ) ;       // Select the next file on SD/USB
+      enc_filename = getFSfilename ( enc_nodeID ) ;           // Set new filename
       tmp = enc_filename ;                                    // Copy for display
       dbgprint ( "Select %s", tmp.c_str() ) ;
       while ( ( inx = tmp.indexOf ( "/" ) ) >= 0 )            // Search for last slash
@@ -4526,7 +4366,7 @@ void chk_enc()
 //**************************************************************************************************
 //                                           M P 3 L O O P                                         *
 //**************************************************************************************************
-// Called from the mail loop() for the mp3 functions.                                              *
+// Called from the main loop() for the mp3 functions.                                              *
 // A connection to an MP3 server is active and we are ready to receive data.                       *
 // Normally there is about 2 to 4 kB available in the data stream.  This depends on the sender.    *
 //**************************************************************************************************
@@ -4538,6 +4378,8 @@ void mp3loop()
   String          nodeID ;                               // Next nodeID of track on SD
   uint32_t        timing ;                               // Startime and duration this function
   uint32_t        qspace ;                               // Free space in data queue
+  String          tmp ;                                  // Needed for station name in pref
+  int             inx ;                                  // Indexe of "#" in station name
 
   // Try to keep the Queue to playtask filled up by adding as much bytes as possible
   if ( datamode & ( INIT | HEADER | DATA |               // Test op playing
@@ -4549,7 +4391,7 @@ void mp3loop()
     maxchunk = sizeof(tmpbuff) ;                         // Reduce byte count for this mp3loop()
     qspace = uxQueueSpacesAvailable( dataqueue ) *       // Compute free space in data queue
              sizeof(qdata_struct) ;
-    if ( localfile )                                     // Playing file from SD card?
+    if ( localfile )                                     // Playing file from SD card or USB drive?
     {
       av = mp3filelength ;                               // Bytes left in file
       if ( av < maxchunk )                               // Reduce byte count for this mp3loop()
@@ -4562,8 +4404,8 @@ void mp3loop()
       }
       if ( maxchunk )                                    // Anything to read?
       {
-        claimSPI ( "sdread" ) ;                          // Claim SPI bus
-        res = mp3file.read ( tmpbuff, maxchunk ) ;       // Read a block of data
+        claimSPI ( "fsread" ) ;                          // Claim SPI bus
+        res = read_FS ( tmpbuff, maxchunk ) ;            // Read a block of data
         releaseSPI() ;                                   // Release SPI bus
         mp3filelength -= res ;                           // Number of bytes left
       }
@@ -4579,19 +4421,24 @@ void mp3loop()
       {
         maxchunk = qspace ;                              // No, limit to free queue space
       }
-      if ( maxchunk )                                    // Anything to read?
+      if ( ( maxchunk > 1000 ) ||
+           ( datamode == INIT ) ||                       // Only read if worthwile or during INIT
+           ( datamode == PLAYLISTINIT ) )
       {
-        res = mp3client.read ( tmpbuff, maxchunk ) ;     // Read a number of bytes from the stream
-      }
-      else
-      {
-        if ( datamode == PLAYLISTDATA )                  // End of playlist
+        if ( maxchunk )                                  // Zero bytes not allowed
         {
-          playlist_num = 0 ;                             // And reset
-          dbgprint ( "End of playlist seen" ) ;
-          datamode = STOPPED ;
-          ini_block.newpreset++ ;                        // Go to next preset
+          res = mp3client.read ( tmpbuff, maxchunk ) ;   // Read a number of bytes from the stream
         }
+      }
+    }
+    if ( maxchunk == 0 )
+    {
+      if ( datamode == PLAYLISTDATA )                    // End of playlist
+      {
+        playlist_num = 1 ;                               // Yes, restart playlist
+        dbgprint ( "End of playlist seen" ) ;
+        setdatamode ( STOPPED ) ;
+        ini_block.newpreset++ ;                          // Go to next preset
       }
     }
     for ( int i = 0 ; i < res ; i++ )
@@ -4611,7 +4458,7 @@ void mp3loop()
     if ( localfile )
     {
       claimSPI ( "close" ) ;                             // Claim SPI bus
-      mp3file.close() ;
+      close_SDCARD() ;
       releaseSPI() ;                                     // Release SPI bus
     }
     else
@@ -4623,7 +4470,7 @@ void mp3loop()
     outqp = outchunk.buf ;                               // and pointer
     queuefunc ( QSTOPSONG ) ;                            // Queue a request to stop the song
     metaint = 0 ;                                        // No metaint known now
-    datamode = STOPPED ;                                 // Yes, state becomes STOPPED
+    setdatamode ( STOPPED ) ;                            // Yes, state becomes STOPPED
     return ;
   }
   if ( localfile )                                       // Playing from SD?
@@ -4632,37 +4479,27 @@ void mp3loop()
     {
       if ( av == 0 )                                     // End of mp3 data?
       {
-        datamode = STOPREQD ;                            // End of local mp3-file detected
-        nodeID = selectnextSDnode ( SD_currentnode,
-                                    +1 ) ;               // Select the next file on SD
-        host = getSDfilename ( nodeID ) ;
+        setdatamode ( STOPREQD ) ;                       // End of local mp3-file detected
+        if ( playlist_num )                              // Playing from playlist?
+        {
+          playlist_num++ ;                               // Yes, goto next item in playlist
+          setdatamode ( PLAYLISTINIT ) ;
+          host = playlist ;
+        }
+        else
+        {
+          nodeID = selectnextFSnode ( +1 ) ;             // Select the next file on SD/USB
+          host = getFSfilename ( nodeID ) ;
+        }
         hostreq = true ;                                 // Request this host
       }
     }
   }
-#if defined(ARDUINO_ODROID_ESP32_OBSOLETE)
-  if (( ini_block.newgenrestation != 0) && (ini_block.newgenrestation != currentgenrestation))
-  {
-    uint32_t genre = (ini_block.newgenrestation >> 16);
-    uint16_t gpreset = ini_block.newgenrestation & 0xffff;
-    host = genres.getUrl(genre, gpreset);
-    if (host == "")
-    {
-      ini_block.newgenrestation = currentgenrestation;
-    }
-    else
-    {
-      currentgenrestation = ini_block.newgenrestation;
-      connecttohost();
-    }
-  }
-  else
-#endif  
   if ( ini_block.newpreset != currentpreset )            // New station or next from playlist requested?
   {
     if ( datamode != STOPPED )                           // Yes, still busy?
     {
-      datamode = STOPREQD ;                              // Yes, request STOP
+      setdatamode ( STOPREQD ) ;                         // Yes, request STOP
     }
     else
     {
@@ -4675,6 +4512,15 @@ void mp3loop()
       else
       {
         host = readhostfrompref() ;                       // Lookup preset in preferences
+        icyname = host ;                                  // First guess station name
+        inx = icyname.indexOf ( "#" ) ;                   // Get position of "#"
+        if ( inx > 0 )                                    // Hash sign present?
+        {
+          icyname.remove ( 0, inx + 1 ) ;                 // Yes, remove non-comment part
+        }
+        chomp ( icyname ) ;                               // Remove garbage from description
+        tftset ( 2, icyname ) ;                           // Set screen segment bottom part
+        mqttpub.trigger ( MQTT_ICYNAME ) ;                // Request publishing to MQTT
         chomp ( host ) ;                                  // Get rid of part after "#"
       }
       dbgprint ( "New preset/file requested (%d/%d) from %s",
@@ -4693,6 +4539,7 @@ void mp3loop()
   }
   if ( hostreq )                                          // New preset or station?
   {
+    dbgprint ( "New station request" ) ;
     hostreq = false ;
     currentpreset = ini_block.newpreset ;                 // Remember current preset
     mqttpub.trigger ( MQTT_PRESET ) ;                     // Request publishing to MQTT
@@ -4700,9 +4547,9 @@ void mp3loop()
     localfile = ( host.indexOf ( "localhost/" ) >= 0 ) ;
     if ( localfile )                                      // Play file from localhost?
     {
-      if ( connecttofile() )                              // Yes, open mp3-file
+      if ( ! connecttofile() )                            // Yes, open mp3-file
       {
-        datamode = DATA ;                                 // Start in DATA mode
+        setdatamode ( STOPPED ) ;                         // Start in DATA mode
       }
     }
     else
@@ -4726,11 +4573,10 @@ void mp3loop()
 void loop()
 {
   mp3loop() ;                                       // Do mp3 related actions
-#if defined(ARDUINO_ODROID_ESP32)
-    odroidLoop();
-    mp3loop();
-#endif
-
+#if defined(ARDUINO_ODROID_ESP32)  
+  odroidLoop();
+  mp3loop();
+#else
   if ( updatereq )                                  // Software update requested?
   {
     if ( displaytype == T_NEXTION )                 // NEXTION in use?
@@ -4742,6 +4588,7 @@ void loop()
                       UPDATEHOST, BINFILE ) ;
     resetreq = true ;                               // And reset
   }
+#endif  
   if ( resetreq )                                   // Reset requested?
   {
     delay ( 1000 ) ;                                // Yes, wait some time
@@ -4749,7 +4596,6 @@ void loop()
   }
   scanserial() ;                                    // Handle serial input
   scanserial2() ;                                   // Handle serial input from NEXTION (if active)
-
   scandigital() ;                                   // Scan digital inputs
   scanIR() ;                                        // See if IR input
   ArduinoOTA.handle() ;                             // Check for OTA
@@ -4770,7 +4616,42 @@ void loop()
   handleIpPub() ;                                   // See if time to publish IP
   handleVolPub() ;                                  // See if time to publish volume
   chk_enc() ;                                       // Check rotary encoder functions
+#if !defined(ARDUINO_ODROID_ESP32)
+  check_CH376() ;                                   // Check Flashdrive insert/remove
+#endif
+}
 
+
+//**************************************************************************************************
+//                             D E C O D E _ S P E C _ C H A R S                                   *
+//**************************************************************************************************
+// Decode special characters like "&#39;".                                                         *
+//**************************************************************************************************
+String decode_spec_chars ( String str )
+{
+  int    inx, inx2 ;                                // Indexes in string
+  char   c ;                                        // Character from string
+  char   val ;                                      // Converted character
+  String res = str ;
+
+  while ( ( inx = res.indexOf ( "&#" ) ) >= 0 )     // Start sequence in string?
+  {
+    inx2 = res.indexOf ( ";", inx ) ;               // Yes, search for stop character
+    if ( inx2 < 0 )                                 // Stop character found
+    {
+      break ;                                       // Malformed string
+    }
+    res = str.substring ( 0, inx ) ;                // First part
+    inx += 2 ;                                      // skip over start sequence
+    val = 0 ;                                       // Init result of 
+    while ( ( c = str[inx++] ) != ';' )             // Convert character
+    {
+      val = val * 10 + c - '0' ;
+    }
+    res += ( String ( val ) +                       // Add special char to string
+             str.substring ( ++inx2 ) ) ;           // Add rest of string
+  }
+  return res ;
 }
 
 
@@ -4794,7 +4675,7 @@ bool chkhdrline ( const char* str )
       {
         if ( b == ':' )                               // Found a colon?
         {
-          return ( ( len > 5 ) && ( len < 50 ) ) ;    // Yes, okay if length is okay
+          return ( ( len > 5 ) && ( len < 70 ) ) ;    // Yes, okay if length is okay
         }
         else
         {
@@ -4878,7 +4759,7 @@ void handlebyte_ch ( uint8_t b )
     {
       if ( --datacount == 0 )                          // End of datablock?
       {
-        datamode = METADATA ;
+        setdatamode ( METADATA ) ;
         metalinebfx = -1 ;                             // Expecting first metabyte (counter)
       }
     }
@@ -4891,7 +4772,7 @@ void handlebyte_ch ( uint8_t b )
     LFcount = 0 ;                                      // For detection end of header
     bitrate = 0 ;                                      // Bitrate still unknown
     dbgprint ( "Switch to HEADER" ) ;
-    datamode = HEADER ;                                // Handle header
+    setdatamode ( HEADER ) ;                           // Handle header
     totalcount = 0 ;                                   // Reset totalcount
     metalinebfx = 0 ;                                  // No metadata yet
     metalinebf[0] = '\0' ;
@@ -4920,6 +4801,11 @@ void handlebyte_ch ( uint8_t b )
           host = metaline.substring ( 17 ) ;           // Yes, get new URL
           hostreq = true ;                             // And request this one
         }
+        if ( lcml.startsWith ("location: https://") )  // Redirection?
+        {
+          host = metaline.substring ( 18 ) ;           // Yes, get new URL
+          hostreq = true ;                             // And request this one
+        }
         if ( lcml.indexOf ( "content-type" ) >= 0)     // Line with "Content-Type: xxxx/yyy"
         {
           ctseen = true ;                              // Yes, remember seeing this
@@ -4942,13 +4828,9 @@ void handlebyte_ch ( uint8_t b )
         else if ( lcml.startsWith ( "icy-name:" ) )
         {
           icyname = metaline.substring(9) ;            // Get station name
+          icyname = decode_spec_chars ( icyname ) ;    // Decode special characters in name
           icyname.trim() ;                             // Remove leading and trailing spaces
-#if defined(ARDUINO_ODROID_ESP32)
-         String icyshort = icyname.substring(0, 50);
-         tftset(2, icyshort);
-#else
           tftset ( 2, icyname ) ;                      // Set screen segment bottom part
-#endif
           mqttpub.trigger ( MQTT_ICYNAME ) ;           // Request publishing to MQTT
         }
         else if ( lcml.startsWith ( "transfer-encoding:" ) )
@@ -4967,7 +4849,7 @@ void handlebyte_ch ( uint8_t b )
         dbgprint ( "Switch to DATA, bitrate is %d"     // Show bitrate
                    ", metaint is %d",                  // and metaint
                    bitrate, metaint ) ;
-        datamode = DATA ;                              // Expecting data now
+        setdatamode ( DATA ) ;                         // Expecting data now
         datacount = metaint ;                          // Number of bytes before first metadata
         queuefunc ( QSTARTSONG ) ;                     // Queue a request to start song
       }
@@ -5022,8 +4904,8 @@ void handlebyte_ch ( uint8_t b )
         metaint = 0 ;                                  // Probably no metadata
       }
       datacount = metaint ;                            // Reset data count
-      //bufcnt = 0 ;                                     // Reset buffer count
-      datamode = DATA ;                                // Expecting data
+      //bufcnt = 0 ;                                   // Reset buffer count
+      setdatamode ( DATA ) ;                           // Expecting data
     }
   }
   if ( datamode == PLAYLISTINIT )                      // Initialize for receive .m3u file
@@ -5032,7 +4914,14 @@ void handlebyte_ch ( uint8_t b )
     // Sometimes this will only contain a single line
     metalinebfx = 0 ;                                  // Prepare for new line
     LFcount = 0 ;                                      // For detection end of header
-    datamode = PLAYLISTHEADER ;                        // Handle playlist data
+    if ( localfile )                                   // SD-card mode?
+    {
+      setdatamode ( PLAYLISTDATA ) ;                   // Yes, no header here
+    }
+    else
+    {
+      setdatamode ( PLAYLISTHEADER ) ;                 // Handle playlist header
+    }
     playlistcnt = 1 ;                                  // Reset for compare
     totalcount = 0 ;                                   // Reset totalcount
     clength = 0xFFFFFFFF ;                             // Content-length unknown
@@ -5059,7 +4948,7 @@ void handlebyte_ch ( uint8_t b )
         dbgprint ( "Switch to PLAYLISTDATA, "          // For debug
                    "search for entry %d",
                    playlist_num ) ;
-        datamode = PLAYLISTDATA ;                      // Expecting data now
+        setdatamode ( PLAYLISTDATA ) ;                 // Expecting data now
         mqttpub.trigger ( MQTT_PLAYLISTPOS ) ;         // Playlistposition to MQTT
         return ;
       }
@@ -5136,14 +5025,27 @@ void handlebyte_ch ( uint8_t b )
         {
           host = metaline ;                            // Yes, set new host
         }
-        connecttohost() ;                              // Connect to it
+        if ( localfile )                               // SD card mode?
+        {
+          if ( ! metaline.startsWith ( "localhost" ) ) // Prepend "localhost" if missing
+          {
+            host = String ( "localhost/" ) + metaline ;
+          }
+          if ( ! connecttofile() )                     // Yes, connect to file
+          {
+            setdatamode ( STOPPED ) ;                  // Error, stop!
+          }
+        }
+        else
+        {
+          connecttohost() ;                           // Connect to stream host
+        }
       }
       metalinebfx = 0 ;                                // Prepare for next line
       host = playlist ;                                // Back to the .m3u host
       playlistcnt++ ;                                  // Next entry in playlist
     }
   }
-
 }
 
 
@@ -5197,9 +5099,16 @@ void handleFSf ( const String& pagename )
     }
     else if ( pagename.indexOf ( "radio.css" ) >= 0 )   // CSS file is in PROGMEM
     {
-      p = radio_css + 1 ;
+      p = radio_css ;
       l = sizeof ( radio_css ) ;
     }
+#if !defined(ARDUINO_ODROID_ESP32)
+    else if ( pagename.indexOf ( "search.html" ) >= 0 ) // Search page is in PROGMEM
+    {
+      p = search_html ;
+      l = sizeof ( search_html ) ;
+    }
+#endif
     else if ( pagename.indexOf ( "config.html" ) >= 0 ) // Config page is in PROGMEM
     {
       p = config_html ;
@@ -5220,15 +5129,6 @@ void handleFSf ( const String& pagename )
       p = (char*)favicon_ico ;
       l = sizeof ( favicon_ico ) ;
     }
-#if defined(ARDUINO_ODROID_ESP32)
-    else if ( pagename.indexOf ( "startup.html" ) >= 0 )  // Startup page is in PROGMEM of OdroidExtra.ino
-    {
-      extern const char* startup_html;
-      extern size_t startup_htmlSize;
-      p = startup_html ;
-      l = startup_htmlSize ;
-    }
-#endif    
     else
     {
       p = index_html ;
@@ -5325,7 +5225,7 @@ const char* analyzeCmd ( const char* str )
 // "wifi_00" and "preset_00" may appear more than once, like wifi_01, wifi_02, etc.                *
 // Examples with available parameters:                                                             *
 //   preset     = 12                        // Select start preset to connect to                   *
-//   preset_00  = <mp3 stream>              // Specify station for a preset 00-99 *)               *
+//   preset_00  = <mp3 stream>              // Specify station for a preset 00-max *)              *
 //   volume     = 95                        // Percentage between 0 and 100                        *
 //   upvolume   = 2                         // Add percentage to current volume                    *
 //   downvolume = 2                         // Subtract percentage from current volume             *
@@ -5356,6 +5256,7 @@ const char* analyzeCmd ( const char* str )
 //   reset                                  // Restart the ESP32                                   *
 //   bat0       = 2318                      // ADC value for an empty battery                      *
 //   bat100     = 2916                      // ADC value for a fully charged battery               *
+//   fs         = USB or SD                 // Select local filesystem for MP# player mode.        *
 //  Commands marked with "*)" are sensible during initialization only                              *
 //**************************************************************************************************
 const char* analyzeCmd ( const char* par, const char* val )
@@ -5410,9 +5311,7 @@ const char* analyzeCmd ( const char* par, const char* val )
   if ( argument.indexOf ( "volume" ) >= 0 )           // Volume setting?
   {
     // Volume may be of the form "upvolume", "downvolume" or "volume" for relative or absolute setting
-
     oldvol = vs1053player->getVolume() ;              // Get current volume
-
     if ( relative )                                   // + relative setting?
     {
       ini_block.reqvol = oldvol + ivalue ;            // Up/down by 0.5 or more dB
@@ -5456,7 +5355,11 @@ const char* analyzeCmd ( const char* par, const char* val )
   {
     doGenreConfig ( argument.substring(5), value ) ;
   }
-#endif
+  else if ( argument == "monkey" )
+  {
+    doMonkeyStart(ivalue);
+  }
+#endif  
   else if ( argument.indexOf ( "preset" ) >= 0 )      // (UP/DOWN)Preset station?
   {
     // If MP3 player is active: change track
@@ -5464,13 +5367,24 @@ const char* analyzeCmd ( const char* par, const char* val )
          ( ( datamode & DATA ) != 0 ) &&              // MP# player active?
          relative )
     {
-      datamode = STOPREQD ;                           // Force stop MP3 player
-      tmpstr = selectnextSDnode ( SD_currentnode,
-                                  ivalue ) ;          // Select the next or previous file on SD
-      host = getSDfilename ( tmpstr ) ;
+      setdatamode ( STOPREQD ) ;                      // Force stop MP3 player
+      if ( playlist_num )                             // In playlist mode?
+      {
+        playlist_num += ivalue ;                      // Set new entry number
+        if ( playlist_num <= 0 )                      // Limit number
+        {
+          playlist_num = 1 ;
+        }
+        host = playlist ;                             // Yes, prepare to read playlist
+      }
+      else
+      {
+        tmpstr = selectnextFSnode ( ivalue ) ;        // Select the next or previous file on SD/USB
+        host = getFSfilename ( tmpstr ) ;
+        sprintf ( reply, "Playing %s",                // Reply new filename
+                  host.c_str() ) ;
+      }
       hostreq = true ;                                // Request this host
-      sprintf ( reply, "Playing %s",                  // Reply new filename
-                host.c_str() ) ;
     }
     else
     {
@@ -5478,23 +5392,24 @@ const char* analyzeCmd ( const char* par, const char* val )
 extern int genreId;
       if (0 == genreId)
       {
-#endif
+#endif      
       if ( relative )                                 // Relative argument?
       {
+        currentpreset = ini_block.newpreset ;         // Remember currentpreset
         ini_block.newpreset += ivalue ;               // Yes, adjust currentpreset
       }
       else
       {
         ini_block.newpreset = ivalue ;                // Otherwise set station
         playlist_num = 0 ;                            // Absolute, reset playlist
+        currentpreset = -1 ;                          // Make sure current is different
       }
-      datamode = STOPREQD ;                           // Force stop MP3 player
-      currentpreset = -1 ;                            // Make sure current is different
+      setdatamode ( STOPREQD ) ;                      // Force stop MP3 player
       sprintf ( reply, "Preset is now %d",            // Reply new preset
                 ini_block.newpreset ) ;
 #if defined(ARDUINO_ODROID_ESP32)
     }
-#endif 
+#endif                 
     }
   }
   else if ( argument == "stop" )                      // (un)Stop requested?
@@ -5503,7 +5418,7 @@ extern int genreId;
                       PLAYLISTHEADER | PLAYLISTDATA ) )
 
     {
-      datamode = STOPREQD ;                           // Request STOP
+      setdatamode ( STOPREQD ) ;                      // Request STOP
     }
     else
     {
@@ -5516,24 +5431,24 @@ extern int genreId;
   {
     if ( argument.startsWith ( "mp3" ) )              // MP3 track to search for
     {
-      if ( !SD_okay )                                 // SD card present?
+      value = getFSfilename ( value ) ;               // like "localhost/........"
+      if ( value.length() == 0 )                      // Found?
       {
-        strcpy ( reply, "Command not accepted!" ) ;   // Error reply
+        strcpy ( reply, "Command not accepted!" ) ;   // No, error reply
         return reply ;
       }
-      value = getSDfilename ( value ) ;               // like "localhost/........"
     }
-    if ( datamode & ( HEADER | DATA | METADATA | PLAYLISTINIT |
-                      PLAYLISTHEADER | PLAYLISTDATA ) )
-    {
-      datamode = STOPREQD ;                           // Request STOP
-    }
+    ///if ( datamode & ( HEADER | DATA | METADATA | PLAYLISTINIT |
+    ///                  PLAYLISTHEADER | PLAYLISTDATA ) )
+    ///{
+    ///  setdatamode ( STOPREQD ) ;                      // Request STOP
+    ///}
     host = value ;                                    // Save it for storage and selection later
     hostreq = true ;                                  // Force this station as new preset
     sprintf ( reply,
-              "Playing %s",                           // Format reply
+              "Select %s",                            // Format reply
               host.c_str() ) ;
-    utf8ascii ( reply ) ;                             // Remove possible strange characters
+    utf8ascii_ip ( reply ) ;                          // Remove possible strange characters
   }
   else if ( argument == "status" )                    // Status request
   {
@@ -5576,6 +5491,7 @@ extern int genreId;
     dbgprint ( "ADC reading is %d", adcval ) ;
     dbgprint ( "scaniocount is %d", scaniocount ) ;
     dbgprint ( "Max. mp3_loop duration is %d", max_mp3loop_time ) ;
+    dbgprint ( "%d IR interrupts seen", ir_intcount ) ;
     max_mp3loop_time = 0 ;                            // Start new check
   }
   // Commands for bass/treble control
@@ -5600,6 +5516,10 @@ extern int genreId;
     reqtone = true ;                                  // Set change request
     sprintf ( reply, "Parameter for bass/treble %s set to %d",
               argument.c_str(), ivalue ) ;
+  }
+  else if ( argument == "rate" )                      // Rate command?
+  {
+    vs1053player->AdjustRate ( ivalue ) ;             // Yes, adjust
   }
   else if ( argument.startsWith ( "mqtt" ) )          // Parameter fo MQTT?
   {
@@ -5659,6 +5579,17 @@ extern int genreId;
       ini_block.bat0 = ivalue ;                       // Yes, set it
     }
   }
+  else if ( argument == "fs" )                        // Filesystem for MP3 player mode?
+  {
+    if ( value.equalsIgnoreCase ( "usb" ) )           // Yes, is it USB?
+    {
+      usb_sd = FS_USB ;                               // Yes, change FS setting to USB
+    }
+    else
+    {
+      usb_sd = FS_SD ;                                // Otherwise to SD
+    }
+  }
   else
   {
     sprintf ( reply, "%s called with illegal parameter: %s",
@@ -5695,6 +5626,7 @@ String httpheader ( String contentstype )
 // Show a string on the LCD at a specified y-position (0..2) in a specified color.                 *
 // The parameter is the index in tftdata[].                                                        *
 //**************************************************************************************************
+
 void displayinfo ( uint16_t inx )
 {
   uint16_t       width = dsp_getwidth() ;                  // Normal number of colums
@@ -5752,6 +5684,7 @@ void displayinfo ( uint16_t inx )
   }
 #endif
 }
+
 
 
 //**************************************************************************************************
@@ -5815,10 +5748,9 @@ bool handle_tft_txt()
   for ( uint16_t i = 0 ; i < TFTSECS ; i++ )              // Handle all sections
   {
 #if defined(ARDUINO_ODROID_ESP32)
-    if ( tftdata[i].update_req && !tftdata[i].hidden)
-#else
+   if ( !tftdata[i].hidden)
+#endif    
     if ( tftdata[i].update_req )                          // Refresh requested?
-#endif
     {
       displayinfo ( i ) ;                                 // Yes, do the refresh
       dsp_update() ;                                      // Updates to the screen
@@ -5870,6 +5802,7 @@ void playtask ( void * parameter )
           vs1053player->setVolume ( 0 ) ;                           // Mute
           vs1053player->stopSong() ;                                // STOP, stop player
           releaseSPI() ;                                            // Release SPI bus
+          while ( xQueueReceive ( dataqueue, &inchunk, 0 ) ) ;      // Flush rest of queue
           vTaskDelay ( 500 / portTICK_PERIOD_MS ) ;                 // Pause for a short time
           break ;
         default:
@@ -5882,132 +5815,6 @@ void playtask ( void * parameter )
 }
 
 
-
-//**************************************************************************************************
-//                                      D I S P L A Y B A T T E R Y                                *
-//**************************************************************************************************
-// Show the current battery charge level on the screen.                                            *
-// It will overwrite the top divider.                                                              *
-// No action if bat0/bat100 not defined in the preferences.                                        *
-//**************************************************************************************************
-void displaybattery()
-{
-//#if defined(ARDUINO_ODROID_ESP32)
-//  return;
-//#endif
-  if ( tft )
-  {
-    if ( ini_block.bat0 < ini_block.bat100 )              // Levels set in preferences?
-    {
-      static uint16_t oldpos = 0 ;                        // Previous charge level
-      uint16_t        ypos ;                              // Position on screen
-      uint16_t        v ;                                 // Constrainted ADC value
-      uint16_t        newpos ;                            // Current setting
-
-      v = constrain ( adcval, ini_block.bat0,             // Prevent out of scale
-                      ini_block.bat100 ) ;
-      newpos = map ( v, ini_block.bat0,                   // Compute length of green bar
-                     ini_block.bat100,
-                     0, dsp_getwidth() ) ;
-      if ( newpos != oldpos )                             // Value changed?
-      {
-        oldpos = newpos ;                                 // Remember for next compare
-        ypos = tftdata[1].y - 5 ;                         // Just before 1st divider
-        dsp_fillRect ( 0, ypos, newpos, 2, GREEN ) ;      // Paint green part
-        dsp_fillRect ( newpos, ypos,
-                       dsp_getwidth() - newpos,
-                       2, RED ) ;                          // Paint red part
-      }
-    }
-  }
-}
-
-
-//**************************************************************************************************
-//                                      D I S P L A Y V O L U M E                                  *
-//**************************************************************************************************
-// Show the current volume as an indicator on the screen.                                          *
-// The indicator is 2 pixels heigh.                                                                *
-//**************************************************************************************************
-void displayvolume()
-{
-#if defined(ARDUINO_ODROID_ESP32)
-  return;
-#endif
-  if ( tft )
-  {
-    static uint8_t oldvol = 0 ;                         // Previous volume
-    uint8_t        newvol ;                             // Current setting
-    uint16_t       pos ;                                // Positon of volume indicator
-
-    newvol = vs1053player->getVolume() ;                // Get current volume setting
-    if ( newvol != oldvol )                             // Volume changed?
-    {
-      oldvol = newvol ;                                 // Remember for next compare
-      pos = map ( newvol, 0, 100, 0, dsp_getwidth() ) ; // Compute position on TFT
-      dsp_fillRect ( 0, dsp_getheight() - 2,
-                     pos, 2, RED ) ;                    // Paint red part
-      dsp_fillRect ( pos, dsp_getheight() - 2,
-                     dsp_getwidth() - pos, 2, GREEN ) ; // Paint green part
-    }
-  }
-}
-
-
-//**************************************************************************************************
-//                                      D I S P L A Y T I M E                                      *
-//**************************************************************************************************
-// Show the time on the LCD at a fixed position in a specified color                               *
-// To prevent flickering, only the changed part of the timestring is displayed.                    *
-// An empty string will force a refresh on next call.                                              *
-// A character on the screen is 8 pixels high and 6 pixels wide.                                   *
-//**************************************************************************************************
-void displaytime ( const char* str, uint16_t color )
-{
-  static char oldstr[9] = "........" ;             // For compare
-  uint8_t     i ;                                  // Index in strings
-  uint16_t    pos = dsp_getwidth() + TIMEPOS ;     // X-position of character, TIMEPOS is negative
-#if defined ARDUINO_ODROID_ESP32
-  if (tftdata[0].hidden) {
-    sprintf(oldstr, "........");
-    return;  
-  }
-#endif
-
-
-  if ( str[0] == '\0' )                            // Empty string?
-  {
-    for ( i = 0 ; i < 8 ; i++ )                    // Set oldstr to dots
-    {
-      oldstr[i] = '.' ;
-    }
-    return ;                                       // No actual display yet
-  }
-  if ( tft )                                       // TFT active?
-  {
-    dsp_setTextColor ( color ) ;                   // Set the requested color
-    for ( i = 0 ; i < 8 ; i++ )                    // Compare old and new
-    {
-      if ( str[i] != oldstr[i] )                   // Difference?
-      {
-#if defined ARDUINO_ODROID_ESP32
-        dsp_fillRect ( pos, tftdata[0].y, 6, 8, BLACK ) ;     // Clear the space for new character
-        dsp_setCursor ( pos, tftdata[0].y ) ;                 // Prepare to show the info
-#else
-        dsp_fillRect ( pos, 0, 6, 8, BLACK ) ;     // Clear the space for new character
-        dsp_setCursor ( pos, 0 ) ;                 // Prepare to show the info
-#endif
-        dsp_print ( str[i] ) ;                     // Show the character
-        oldstr[i] = str[i] ;                       // Remember for next compare
-      }
-      pos += 6 ;                                   // Next position
-    }
-  }
-}
-
-
-
-
 //**************************************************************************************************
 //                                   H A N D L E _ S P E C                                         *
 //**************************************************************************************************
@@ -6015,25 +5822,29 @@ void displaytime ( const char* str, uint16_t color )
 //**************************************************************************************************
 void handle_spec()
 {
-#if defined(ARDUINO_ODROID_ESP32)
-//  extern void runSpectrumAnalyzer();
-//  runSpectrumAnalyzer();
-//  odroidLoop();
-#endif  
-
   // Do some special function if necessary
   if ( dsp_usesSPI() )                                        // Does display uses SPI?
   {
-    claimSPI ( "hspec" ) ;                                    // Yes, claim SPI bus
+    claimSPI ( "hspectft" ) ;                                 // Yes, claim SPI bus
   }
   if ( tft )                                                  // Need to update TFT?
   {
-    handle_tft_txt() ;                                        // Yes, TFT refresh necessary
-    dsp_update() ;                                            // Be sure to paint physical screen
+
+#if !defined(ARDUINO_ODROID_ESP32)
+    handle_tft_txt();                                        // Yes, TFT refresh necessary
+#else
+extern void runSpectrumAnalyzer();
+    if (!handle_tft_txt());
+      //runSpectrumAnalyzer();
+#endif
   }
   if ( dsp_usesSPI() )                                        // Does display uses SPI?
   {
     releaseSPI() ;                                            // Yes, release SPI bus
+  }
+  if ( time_req && NetworkFound )                             // Time to refresh time?
+  {
+    gettime() ;                                               // Yes, get the current time
   }
   claimSPI ( "hspec" ) ;                                      // Claim SPI bus
   if ( muteflag )                                             // Mute or not?
@@ -6054,10 +5865,11 @@ void handle_spec()
     time_req = false ;                                        // Yes, clear request
     if ( NetworkFound  )                                      // Time available?
     {
-      gettime() ;                                             // Yes, get the current time
       displaytime ( timetxt ) ;                               // Write to TFT screen
+#if !defined(ARDUINO_ODROID_ESP32)
       displayvolume() ;                                       // Show volume on display
       displaybattery() ;                                      // Show battery charge on display
+#endif
     }
   }
   releaseSPI() ;                                              // Release SPI bus
@@ -6086,7 +5898,6 @@ void spftask ( void * parameter )
 {
   while ( true )
   {
-
     handle_spec() ;                                                 // Maybe some special funcs?
     vTaskDelay ( 100 / portTICK_PERIOD_MS ) ;                       // Pause for a short time
     adcval = ( 15 * adcval +                                        // Read ADC and do some filtering
