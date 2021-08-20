@@ -54,7 +54,7 @@ scrseg_struct     tftdata[TFTSECS] =                        // Screen divided in
     // identical to TFTSEC_BOT, except color & static text!
   {false, WHITE, 106, 8, "OBSOLETE", true,0},                         
   {false, YELLOW, 48, 8, "Station x", true,0},
-  {false, WHITE, 48, 8, "", true,0},                                 // updated menu item 
+  {false, WHITE, 48, 8, "", true,20},                                 // updated menu item 
   {false, 0xA510, 16, 24, "Station x-2\nStation x-1", true,0},
   {false, 0xA510, 64, 16, "Station x+1\nStation x+2", true,0},
   { false, WHITE,   2,  8, "<1>    <2>       <3>   <4>", true,0 },                            // 1 top line
@@ -96,8 +96,11 @@ int genrePreset = 0;
 int genreChannelOffset = 0;
 char *genreSelected = NULL;
 String genreStation;
+uint32_t spectrumBlockTime = 0;
 
 int listSelectedPreset = 0;
+
+int theMonkey = 0;
 
 struct cstrless {
     bool operator()(const char* a, const char* b) {
@@ -118,6 +121,8 @@ char *genreListBuffer = NULL;
 std::set<const char*, cstrless> genreList;
 
 uint16_t genreLoopState = GENRELOOPSTATE_INIT;
+
+
 
 
 class RadioMenu;
@@ -181,6 +186,29 @@ class SpectrumAnalyzer {
     uint16_t getColor(int16_t code);
 
 } spectrumAnalyzer;
+
+
+void doMonkeyStart(int ivalue)
+{
+  theMonkey = ivalue;
+}
+
+
+void monkeyRun() {
+  static uint32_t lastAction = 0;
+  if (theMonkey)
+    if (1 == theMonkey)
+    {
+      if (genreId)
+        if (millis() - lastAction > 2000)
+          if (!random(10))
+            {
+            String s = String("--id ") + String(1 + random(genreList.size()));
+            doGenre("genre", s);
+            lastAction = millis();
+            }
+    }
+}
 
 void drawPresetList(int channelX)
 {
@@ -337,6 +365,8 @@ class BottomLineStatemachine: public BasicStatemachine {
     int _idx = 0;
     void onEnter(int16_t currentStatenb, int16_t oldStatenb);
     void runState(int16_t stateNb);
+  private:
+    void scrolltext();
 } bottomLineStatemachine;
 
 
@@ -591,6 +621,7 @@ class RadioMenuEntry {
     void printValueString() {
       char *s = getValueString();
       tftdata[TFTSEC_MENU_VAL].x = (26 - strlen(s)) * 6;
+      
       tftset(TFTSEC_MENU_VAL, s);
     };
     
@@ -994,6 +1025,7 @@ class RadioMenu {
       }  
       if (_currentEntry) {
         String str = _currentEntry->getDisplayString(0, false);
+        //Serial.printf("current menu display string is: %s\r\n", str.c_str());
         tftset(TFTSEC_LIST_CUR, str);
         _currentEntry->printValueString();
         str = _currentEntry->getDisplayString(-3) + String("\n") + _currentEntry->getDisplayString(-2) + String("\n") + _currentEntry->getDisplayString(-1); 
@@ -2165,16 +2197,30 @@ int16_t iniVolume;
   return step < 2;      // more to do?
 }
 
+void odroidSetup2(void)
+{
+    dsp_fillRect ( 0, 8 + tftdata[0].y,                                  // Clear most of the screen
+                   dsp_getwidth(),
+                   dsp_getheight() - 8 - tftdata[0].y, BLACK ) ;
+    dsp_setCursor ( 0, tftdata[1].y ) ;                           // Top of screen  
+  while (!odroidRadioFirstLoopSetup())
+    ;
+}
+
 
 void odroidLoop(void) {    
 static bool first = true;
   if (first) {
+    dbgprint("\n\nRunning First Loop Setup\n\n");
     first = odroidRadioFirstLoopSetup();
     dbgprint("First loop setup done!");
   } else {
     genreLoop();
     StatemachineLooper.run();
+    claimSPI("spectrum");
     runSpectrumAnalyzer();
+    releaseSPI();
+    monkeyRun();
   }
 }
 
@@ -2257,7 +2303,7 @@ void dsp_upsideDown()
   };
 
    void RadioStatemachine::menuButton(uint8_t button, uint16_t repeats) {
-//    Serial.printf("Menu Button %d (repeats: %ld)\r\n", button, repeats);
+    dbgprint("Menu Button %d (repeats: %ld)\r\n", button, repeats);
     if (_currentMenu) {
       if ((MENU_UP == button) || (MENU_DN == button) || (MENU_LEFT == button) || (MENU_RIGHT == button)) {
         if ((repeats % KEY_SPEED) == 0) {
@@ -2308,7 +2354,9 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
       bool ignoreSpectrumAnalyzerSection = false;
       tftdata[TFTSEC_TXT].color = CYAN;
       dsp_setRotation();
-
+      if ((RADIOSTATE_PRESET_SET == currentStatenb) 
+            || (RADIOSTATE_LIST_SET == currentStatenb))
+        spectrumBlockTime = millis();
       if ((STATE_INIT_NONE == oldStatenb) && (0 == odroidRadioConfig.start.preset)){
         String str = nvsgetstr ( "preset" );
 
@@ -2519,7 +2567,7 @@ const char *s = (const char *)&buf;
     case BOTTOMLINE_GENRE_START:  
       tftdata[TFTSEC_FAV_BOT].color = WHITE;
       _lastGenre = genreId;
-      sprintf(buf, "Genre '%s' (station %d of %d)  ", genres.getName(genreId).c_str(), genrePreset, genrePresets);
+      sprintf(buf, "Genre '%s' (station %d of %d)", genres.getName(genreId).c_str(), genrePreset, genrePresets);
       break;
     case BOTTOMLINE_GENRE_SECOND:
         tftdata[TFTSEC_FAV_BOT].color = TFT_GREENYELLOW;
@@ -2570,12 +2618,24 @@ const char *s = (const char *)&buf;
   if (s) {
     _display = String(s);
     _idx = 0;
-    String str = String(s).substring(0, 26);
-    tftset(TFTSEC_FAV_BOT, str);  
+    //String str = String(s).substring(0, 26);
+    tftset(TFTSEC_FAV_BOT, _display);  
     tftdata[TFTSEC_FAV_BOT].update_req = true;              
     tftdata[TFTSEC_FAV_BOT].hidden = false;              
     //Serial.printf("Setting Bottom line to: '%s'", s);    
   }
+}
+
+
+void BottomLineStatemachine::scrolltext() {
+  if (_display.length() > 26)
+    if (getStateTime() > 500)
+    {          
+      _idx = (_idx + 1) % (_display.length() + 1);            
+      String s = _display.substring(_idx, _idx + 26) + " " + _display;
+      tftset(TFTSEC_FAV_BOT, s);  
+      resetStateTime();
+    }
 }
 
 void BottomLineStatemachine::runState(int16_t stateNb){
@@ -2599,16 +2659,7 @@ void BottomLineStatemachine::runState(int16_t stateNb){
           setState(BOTTOMLINE_GENRE_START);
           break;
         case BOTTOMLINE_GENRE_SECOND:
-          if (_display.length() > 25)
-            if (getStateTime() > 500)
-              {
-                _idx = (_idx + 1) % _display.length();            
-                String s = _display.substring(_idx, _idx + 26);
-                if (s.length() < 26)
-                  s = s + _display.substring(0, 26 - s.length()); 
-                tftset(TFTSEC_FAV_BOT, s);  
-                resetStateTime();
-              }
+          scrolltext();
           break;
         case BOTTOMLINE_LIST_PRESETS:
           break;
@@ -2619,6 +2670,8 @@ void BottomLineStatemachine::runState(int16_t stateNb){
             setState(BOTTOMLINE_NO_GENRES2);
           break;
         case BOTTOMLINE_NO_GENRES2:
+          scrolltext();
+          /*
           if (getStateTime() > 500)
             {
                 _idx = (_idx + 1) % _display.length();            
@@ -2631,6 +2684,7 @@ void BottomLineStatemachine::runState(int16_t stateNb){
                   resetStateTime();
                 }
             }
+          */
           break;
         case BOTTOMLINE_NO_GENRES3:
           if (getStateTime() > 1000)
@@ -2712,6 +2766,26 @@ bool SpectrumAnalyzer::activation(bool on) {
   return _valid && _active;
 }
 
+void VS1053::loadUserCode(const uint16_t* plugin, size_t pluginSize) {
+  int i = 0;
+  while (i < pluginSize) {
+    uint16_t addr, n, val;
+    addr = plugin[i++];
+    n = plugin[i++];
+    if (n & 0x8000U) {/* RLE run, replicate n samples */
+      n &= 0x7FFF;
+      val = plugin[i++];
+      while (n--) {
+        write_register(addr, val);
+      }
+    } else { /* Copy run, copy n samples */
+      while (n--) {
+        val = plugin[i++];
+        write_register(addr, val);
+      }
+    }
+  }
+}
 
 #ifdef OLD
 void SpectrumAnalyzer::run() {
@@ -2866,9 +2940,12 @@ void SpectrumAnalyzer::run1() {
 //    uint8_t _showSpeed = 3;
 
     if (!_lastRun || (millis() - _lastRun >= _speedMap[_showSpeed])) {
-      _lastRun = millis();
+  
+      //claimSPI("spectrum");
       readBands();
-      //hack
+      //releaseSPI();
+      _lastRun = millis();
+    //hack
       if (_showText)
         tftdata[TFTSEC_TXT].hidden = false;
     for(uint8_t toDraw = 0;toDraw < 14;toDraw++) {
@@ -2942,26 +3019,25 @@ uint16_t SpectrumAnalyzer::getColor(int16_t code) {
 
 void runSpectrumAnalyzer() {
   if (!tftdata[TFTSEC_SPECTRUM].hidden)             // this is only true, if spectrum analyzer should be displayed
-    if (!(spectrumAnalyzer.showText()?tftdata[TFTSEC_TXT].update_req:tftdata[TFTSEC_SPECTRUM].update_req)){      
+    if (spectrumBlockTime)
+    {
+      if (millis() - spectrumBlockTime > 1500)
+        spectrumBlockTime = 0;
+    }
+    else
+      if (!(spectrumAnalyzer.showText()?tftdata[TFTSEC_TXT].update_req:tftdata[TFTSEC_SPECTRUM].update_req)){      
       // and this only after the display area has been cleared (and thus deleted the previous overlaying content)
-      claimSPI("spectrum");
-      spectrumAnalyzer.run1();
-      releaseSPI();
-  }
+        spectrumAnalyzer.run1();  
+    }
 }
 
 bool SpectrumAnalyzer::readBands() {
 uint8_t bands;
 static bool readSuccess = true;
      _drawn = 0;
-//    claimSPI("spectrum");
-//  if (_valid) {
         vs1053player->write_register(SCI_WRAMADDR, _base+2);
         bands = vs1053player->read_register(SCI_WRAM);
-//        _valid = _bands == 14;
         if (bands <= _bands) {
-//          vs1053player->write_register(SCI_WRAMADDR, _base+1);
-//          vs1053player->write_register(SCI_WRAM, 0xffff);
           vs1053player->write_register(SCI_WRAMADDR, _base+4);
           int8_t skip = (_bands - bands) / 2;
           for (int8_t i = 0; i < _bands; i++) {
@@ -2985,7 +3061,6 @@ static bool readSuccess = true;
             _spectrum[i][3] = 0;
           }
         }
-//     releaseSPI();
   return bands == _bands;
 }
 

@@ -131,8 +131,8 @@ on till B3/(4) for preset_23.
 Presets that are not assigned will show as empty line. If selected, the radio will skip to the next available station in 
 the preset list.
 
-#### By Channel list
-By pressing (Up) or (Down) in normal screen, a station list will appear that allows to browse through all defined presets.
+#### By Preset list
+By pressing (Up) or (Down) in normal screen, a Preset List will appear that allows to browse through all defined presets.
 Empty (not defined) presets are not shown in this list (also not the preset number). A station can be started by pressing 
 (Right). The list will be cancelled if (Left) is pressed or after a timeout without any user input.
 
@@ -141,6 +141,22 @@ Empty (not defined) presets are not shown in this list (also not the preset numb
 ### Loading Genres
 Befor using genre playlists, you must download them to the Odroid. The playlists will be stored in the Flash-Filesystem, so you probably want to 
 use a huge SPIFFS partition (see [Compiling](#compiling) above). This setting can not be changed at runtime!!
+
+Downloading the genre playlists will be done from a web-interface. The main reason is that there is quite a lot of data to handle, that is better
+left to a more powerful desktop computer and not the ESP32.
+
+**Javascript must be enabled** for the download process. Also, the download process might take some time (depending on the number of stations you
+plan to download). **Make sure the website stays open all the time the download is in process** (the progress will be shown on the webpage). If you
+stop the download (by closing the page) the file system should still be in a valid state, just it might contain less than expected.
+
+Currently there is no explicit error message when the file system is full. The website will pretend to progress just fine. From Serial command line
+you can run _"genre=--test"_ to check the available space on the file system.
+
+If something goes wrong, you can use the command _"genre=--format"_ from Serial command line to format the Filesystem. **This will (without further
+confirmation) erase everything on the filesystem!**
+
+If you do not get a connection to the radio database server (a popup should tell so), you can try to use another server. (see [below]
+(#configuring_anything_around_genres) now to change the default) setting.
 
 The genre playlists of the Odroid are maintained using the public radio database server (https://www.radio-browser.info/#/). 
 This database has more than 27,000 stations organised in different categories (by reagion or genre tags). With this addition, you can 
@@ -289,14 +305,15 @@ as shown in the input fields and will also store these settings to NVS for the n
 
 ### Considerations (and limitations) around using genre playlists
 
-The total number of genre lists is limited (to 1000). This is a compile time limitation that can not be changed by a command or a preference setting. 
+The total number of genre lists is limited (to 1000). This is a compile time limitation that can not be changed by a command or a preference
+setting. 
 
 For faster access, some information is cached. For caching, PSRAM is preferred. If PSRAM is not available, normal heap is used. PSRAM should be
 plenty, however, if there is no sufficient heap, operation might be slower. (Use command _test_ from the Serial input. If the reported Free Memory 
 is below 100.000, it is likely that RAM caching is not available.)
 
 When in genre play mode, you can not use the _preset=n_ command to play a preset. To go back to the "preset-mode", you must open the Genre List
-and then press (A). 
+and then press (A) to return to the Preset list. 
 
 ## MENUs
 ### General
