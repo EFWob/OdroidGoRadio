@@ -110,6 +110,7 @@ extern esp_err_t nvssetstr(const char* key, String value);
 extern char* dbgprint ( const char* format, ... );
 extern void doGpreset(String value);
 extern void doGenre(String param, String value);
+extern void doMonkeyStart(int ivalue);
 
 extern int DEBUG;
 #endif
