@@ -249,6 +249,13 @@ void drawGenreList(int delta = 0)
 String str;
 std::set<const char*>::iterator it = genreList.begin();
 std::set<const char*>::iterator current;
+      if (0 == genreList.size() && (GENRELOOPSTATE_DONE == (GENRELOOPSTATE_DONE & genreLoopState)))
+      {
+        tftset(TFTSEC_LIST_TOP, String("Open http://") + ipaddress + String("/genre.html"));
+        tftset(TFTSEC_LIST_CUR, "    LOAD GENRES FIRST!");
+        tftset(TFTSEC_LIST_BOT, "");
+        return;
+      }
       if (NULL != genreSelected)
         it = genreList.find(genreSelected);
       else if (delta != 0)
@@ -1667,7 +1674,7 @@ void handleBtnAB(uint8_t group, bool released = false) {
   {
    if ((group == 1) && !genres.config.disable())
     {
-      if (-1 != genreListId)
+//      if (-1 != genreListId)
       {
         radioStatemachine.setState(RADIOSTATE_GENRE);
         bottomLineStatemachine.setState(BOTTOMLINE_LIST_GENRE);
@@ -2596,7 +2603,8 @@ const char *s = (const char *)&buf;
           else
           {
             s = NULL;
-            setState(BOTTOMLINE_NO_GENRES);  
+//            setState(BOTTOMLINE_NO_GENRES);  
+            setState(BOTTOMLINE_HAVE_GENRES);
           }
         }
         else
@@ -3441,6 +3449,7 @@ String sndstr = "";
         {
             genres.dbgprint("Creating empty genre: '%s'.", genre.c_str());
             genres.createGenre(genre.c_str());
+            genreLoop(true);
         }
       }
       genreId = genres.findGenre(genre.c_str());
@@ -3644,7 +3653,8 @@ void doGenre(String param, String value)
     }
     else if (param == "format")
     {
-      genres.format(value.toInt());
+      genres.format(false);
+      genreLoop(true);
     }
     /*
     else if (param == "add")
@@ -3918,7 +3928,7 @@ void genreLoop(bool reset)
       if (genres.cacheStep()) 
       {
         String list = genres.playList();
-        if (list.length() >= 0)
+        if (list.length() > 0)
         {
           genreListBuffer = (char *)genres.gmalloc(list.length() + 1, true);
           if (genreListBuffer)

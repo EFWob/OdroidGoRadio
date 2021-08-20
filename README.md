@@ -12,7 +12,17 @@ to set the board "M5Stack-FIRE" and Partition Scheme "Large SPIFFS" in the Ardui
 
 Three more libraries are needed compared to the previous release, see [Compiling](#compiling) below.
 
-Before using Genre playlist, you must download the playlists from the radio database. See [Using Genres](#using-genres) below.
+Before using Genre playlists, you must download the playlists from the radio database. See [Using Genres](#using-genres) below.
+
+I also rebased to the latest version of the ESP32-Radio (see https://github.com/Edzelf/ESP32-Radio).
+
+Some minor improvements include:
+- the spectrum analyzer will now show on stations where it did not show in the first release.
+- text that is to long for its section (namely radio text and station name) will be cut to fit and not overlap in the next section
+
+In the /pic directory of this repository is a (very) short demo that shows switching from playing a preset from preferences to the genre "disco" 
+(if you do not like the appearance of the spectrum analyzer: do not worry, you can configure the layout and behaviour, up to switching it off 
+completely).
 
 ## Basic Idea
 This is a project to port the ESP32-Radio by Edzelf (see https://github.com/Edzelf/ESP32-Radio) to the Odroid-Go to use the 
@@ -49,8 +59,7 @@ The connection to the VS1053 is done through the Odroid-header pins as follows (
 	* PubSubClient.h (by Nick O'Leary, v2.7.0)
 	* Base64 (by Arturo Guadalupi, v1.0.0) (new for this release)
 	* ArduinoJson (by Benoit Blanchon, v6.13.0) (new for this release)
-	* LittleFS_esp32 (by lorol v1.0.6) (new for this release)
-	bblanchon/ArduinoJson
+	* LittleFS_esp32 (by lorol v1.0.6) (new for this release) (likely to become part of the ESP32-Core v2.x.x)
 
 * Other versions might work too, its just untested. Please let me know if you encounter any difficulties.
 * Select Board "M5Stack-FIRE" and Partition Scheme "Large SPIFFS". In fact, any board definition should be fine, however the ones with
@@ -140,7 +149,13 @@ Empty (not defined) presets are not shown in this list (also not the preset numb
 ## Using Genres
 ### Loading Genres
 Befor using genre playlists, you must download them to the Odroid. The playlists will be stored in the Flash-Filesystem, so you probably want to 
-use a huge SPIFFS partition (see [Compiling](#compiling) above). This setting can not be changed at runtime!!
+use a huge SPIFFS partition (see [Compiling](#compiling) above. The size of the Flash file system can not be changed at runtime!!)
+
+The genre playlists of the Odroid are maintained using the public radio database server (https://www.radio-browser.info/#/). 
+This database has more than 27,000 stations organised in different categories (by reagion or genre tags). With this addition, you can 
+download stations from that radio database as given by their genre-tag. As a result you can have more station lists
+(in addition to the default preset list in NVS) to chose from.
+By now, that lists are organized by genre tag only. So you can create lists like "Pop", "Rock", etc. but not for instance by country.
 
 Downloading the genre playlists will be done from a web-interface. The main reason is that there is quite a lot of data to handle, that is better
 left to a more powerful desktop computer and not the ESP32.
@@ -150,22 +165,17 @@ plan to download). **Make sure the website stays open all the time the download 
 stop the download (by closing the page) the file system should still be in a valid state, just it might contain less than expected.
 
 Currently there is no explicit error message when the file system is full. The website will pretend to progress just fine. From Serial command line
-you can run _"genre=--test"_ to check the available space on the file system.
+you can run _genre=--test_ to check the available space on the file system.
 
-If something goes wrong, you can use the command _"genre=--format"_ from Serial command line to format the Filesystem. **This will (without further
+If something goes wrong, you can use the command _genre=--format_ from Serial command line to format the Filesystem. **This will (without further
 confirmation) erase everything on the filesystem!**
 
-If you do not get a connection to the radio database server (a popup should tell so), you can try to use another server. (see [below]
-(#configuring_anything_around_genres) now to change the default) setting.
+If you do not get a connection to the radio database server (a popup should tell so), you can try to use another server (see [below]
+(#configuring-anything-around-genres) how to change the default setting).
 
-The genre playlists of the Odroid are maintained using the public radio database server (https://www.radio-browser.info/#/). 
-This database has more than 27,000 stations organised in different categories (by reagion or genre tags). With this addition, you can 
-download stations from that radio database as given by their genre-tag. As a result you can have more station lists
-(in addition to the default preset list in NVS) to chose from.
-By now, that lists are organized by genre tag only. So you can create lists like "Pop", "Rock", etc. but not for instance by country.
 
 ### Creating genre playlists
-A specific playlist can have any number of stations, as long as there is free flash left in the flash file system.
+A specific playlist can contain up to 65.534 stations, as long as there is free flash left in the flash file system.
 Unlike the preset list, the station URLs are not entered direct, but are downloaded from the database above. 
 For maintaining the genre playlist, you need to open the URL http://RADIO-IP/genre.html. The first time you do so
 you should see the following. 
@@ -224,7 +234,7 @@ You cannot edit the resulting playlist any further. You can not add single stati
 
 With the default partition the file system is big enough to support (estimate) between 10,000 and 12,000 stations in total. With the "Large SPIFFS" 
 partition I currently (at time of writing) have 26925 stations stored in 192 genres and still have 3.084.288 of the total 7.274.496 bytes of the
-Filesystem available (roughly 60% used). (From Serial command line, use commands _genre=--test_ and _genre=--test_ to get some insights.)
+Filesystem available (roughly 60% used). (From Serial command line, use commands _genre=--test_ and _genre=--lsjson_ to get some insights.)
 
 The final estimate is a bit tricky, as a rule of thumb, the same number of stations will use less space if stored in less genres. So having fewer
 but bigger (with more stations each) genres is better for filesystem space usage.
@@ -233,8 +243,9 @@ but bigger (with more stations each) genres is better for filesystem space usage
 
 The Web interface can hande extended unicode characters. The only thing thats not working currently is if the genre name of the database contains the '/'-character. That I have seen on one genre so far and already forgotten again what it was, so it is currently no priority...
 
-On the Odroid display special Unicode characters can not be displayed properly. The result shortened (or empty) list entries will show on the Odroid 
-display, that can be selected correctly nnonetheless. The same applies to station names including unicode characters.
+On the Odroid display special Unicode characters can not be displayed properly. As a result, list entries will be shortened (even to zero length)
+before shown on the Odroid display.
+However, such entries can be selected correctly nonetheless. The same applies to station names including unicode characters.
 
 ![Web API for genre](pics/genre6.jpg?raw=true "Unicode is fine for Website (but not for ODROID display)")
 
@@ -243,7 +254,7 @@ display, that can be selected correctly nnonetheless. The same applies to statio
 #### Selecting from the Odroid API
 The radio will always start with playing from the presets. To select a genre, enter the preset list by pressing (Up) or (Down). The preset list
 opens, allowing to scroll between the presets as usual. While within this list, press (B) and the Genre list will open (if any genres have been
-loaded). This list can be scrolled using (Up) and (Down) as usual. And as usual, you can cancel the list pressing (LEFT) or selecting a genre by 
+loaded). This list can be scrolled using (Up) and (Down) as usual. And as usual, you can cancel the list pressing (LEFT) or select a genre by 
 pressing (Right). In addition you can use (A) to switch back to the preset list.
 
 If a Genre has been selected, the radio will play a random preset from the selected genre. While playing from a genre, the name of the genre and
@@ -314,6 +325,26 @@ is below 100.000, it is likely that RAM caching is not available.)
 
 When in genre play mode, you can not use the _preset=n_ command to play a preset. To go back to the "preset-mode", you must open the Genre List
 and then press (A) to return to the Preset list. 
+
+The genre tags in the database are assigned by the stations self. They might sometimes not match with your expectations (it is possible that a 
+station in genre "disco" plays AC/DC. Which is not bad, but unexpected may be.)
+
+Some stations have multiple tags assigned. Therefore (especially if you create "Cluster playlists") it is possible that the very same station is
+included more than once in a specific playlist.
+
+The data structure is aligned to support fast switching between stations in playback mode. Downloading however takes some time. You can speed things
+up (a little) if you stop debug output to serial monitor by entering _debug=0_ on the Serial command line. And may be stop playback using the command
+_stop_.
+
+For reference, I measured the download of all genre lists with at least 50 stations. It took about 25 minutes (with all debug output and playing).
+As a result, I had 26.570 stations in 190 genre playlists to chose from.
+
+**REMEMBER TO KEEP THE WEBSITE OPEN WHILE DOWNLOAD IS IN PROGRESS**.
+
+After downloading, the stations should be readily available from the genre list. If not, try turning it off and on again...
+
+And remember, if something goes wrong/looks suspicious, you can always use _genre=--format_ to clean the mess.
+
 
 ## MENUs
 ### General
