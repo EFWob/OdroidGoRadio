@@ -296,7 +296,7 @@ The following commands (including subcommands) are defined:
   Does not stop playing from genre station, if genre is already active when set to _1_. Genres can also still be played from website or from
   Serial command interface.	
 
-- **_gcfg.hostrdbs=hostURL_** Set the host to RDBS. **Defaults to 'de1.api.radio-browser.info'** if not set. 'de', 'nl', 'fr' can be used (as short cuts) to address 'de1.api.radio-browser.info', 'nl1.api.radio-browser.info' or 'fr1.api.radio-browser.info' respectively. Otherwise full server name must be given.
+- **_gcfg.rdbs=hostURL_** Set the host to RDBS. **Defaults to 'de1.api.radio-browser.info'** if not set. 'de', 'nl', 'fr' can be used (as short cuts) to address 'de1.api.radio-browser.info', 'nl1.api.radio-browser.info' or 'fr1.api.radio-browser.info' respectively. Otherwise full server name must be given.
 
 - **_gcfg.showid=0|1_** Show the numerical ID of each genre on website. **Defaults to _0_**. The ID shown for each genre can be used to switch to
   that genre by issuing the command _genre=--id n_, where n is the respective ID. Can be helpful for long genre names or genre names containing 
