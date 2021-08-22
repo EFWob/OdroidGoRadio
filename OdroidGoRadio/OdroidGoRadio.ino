@@ -1482,9 +1482,28 @@ void tftset ( uint16_t inx, String& str )
   if ( inx < TFTSECS )                                  // Segment available on display
   {
 #if defined(ARDUINO_ODROID_ESP32)
-    if (str.length() > 26 * (tftdata[inx].height / 8))  // String to wide?
+    int lines = tftdata[inx].height / 8;
+    const char *p, *p1;
+    p = str.c_str();
+    while (p)
+    {
+      if ( NULL != (p1 = strchr(p, '\n')))
+      {
+        String left = str.substring(0, p1 - p );
+        String space = "";
+        if ((p1 == p) || (0 != ((p1 - p) % 26)))
+          for(int i = 26 - ((p1 - p) % 26);i > 0;i--)
+            space = space + " ";
+        String right = String(p1 + 1);
+        str = left + space + right;
+        p = str.c_str();
+      }
+      else
+        p = NULL;
+    }
+    if (str.length() > 26 * lines) // String to wide?
       tftdata[inx].str = str.substring(0,               // Shorten String to fit...
-                          26 * (tftdata[inx].height / 8)) ;
+                          26 * lines) ;
     else
 #endif  
     tftdata[inx].str = str ;                            // Set string

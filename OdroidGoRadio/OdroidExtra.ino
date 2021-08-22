@@ -212,13 +212,28 @@ void monkeyRun() {
 
 void drawPresetList(int channelX)
 {
+  char buf[26 * 3 + 1];
       String str = readStationfrompref(channelX);
       tftset(TFTSEC_LIST_CUR, str);
       int channel;
       listSelectedPreset = channelX;
       if (100 == (channel = getChannelRelativeTo(channelX, -1)))
         str = "";
-      else {
+      else 
+      {
+        memset(buf, ' ', 26 * 3);
+        buf[26 * 3] = 0;
+        for(int i = - 1;(100 != channel) && (i > -4);i--)
+          {            
+            str = utf8ascii(readStationfrompref(channel).c_str()).substring(0, 26);
+//            Serial.printf("Preset %d offset %d = %d (%s)\n", channelX, i, channel, str.c_str());
+            if (str.length() > 0)
+              memcpy(buf + (i + 3) * 26, str.c_str(), str.length());
+            channel = getChannelRelativeTo(channel, -1);
+          }
+        str = String(buf);
+      }
+/*
         str = readStationfrompref(channel).substring(0, 25);
         if (100 == (channel = getChannelRelativeTo(channel, -1)))
           str = String("\n\n") + str;
@@ -231,22 +246,38 @@ void drawPresetList(int channelX)
 
         }
       }
+*/
       tftset(TFTSEC_LIST_TOP, str);
-
       if (100 == (channel = getChannelRelativeTo(channelX, 1)))
+        buf[0] = 0;
+      else
+      {
+        memset(buf, ' ', 26 * 2);
+        buf[26] = 0;  
+        str = utf8ascii(readStationfrompref(channel).c_str()).substring(0, 26);
+        memcpy(buf, str.c_str(), str.length());
+        if (100 != (channel = getChannelRelativeTo(channel, 1)))
+        {
+          buf[52] = 0;
+          str = utf8ascii(readStationfrompref(channel).c_str()).substring(0, 26);
+          memcpy(buf + 26, str.c_str(), str.length());
+        }
+      }
+/*
         str = "\n\n";
       else {
         str = readStationfrompref(channel).substring(0,25);
         if (100 != (channel = getChannelRelativeTo(channel, 1)))
           str = str + "\n" + readStationfrompref(channel).substring(0, 25);
       }
-      
-      tftset(TFTSEC_LIST_BOT, str);
+*/      
+      tftset(TFTSEC_LIST_BOT, buf);
 }
 
 void drawGenreList(int delta = 0)
 {
 String str;
+char buf[26*3 + 1];
 std::set<const char*>::iterator it = genreList.begin();
 std::set<const char*>::iterator current;
       if (0 == genreList.size() && (GENRELOOPSTATE_DONE == (GENRELOOPSTATE_DONE & genreLoopState)))
@@ -268,6 +299,7 @@ std::set<const char*>::iterator current;
         {
           it = current;
           delta = 0;
+          return; //???
         }
       }
       else if (delta == -1)
@@ -275,7 +307,10 @@ std::set<const char*>::iterator current;
         if (it != genreList.begin())
           --it;
         else 
+        {
           delta = 0;
+          return; //???
+        }
       }
       if (delta)
       {
@@ -285,7 +320,9 @@ std::set<const char*>::iterator current;
       }
       if (it != genreList.end())
       {
-        str = String(*it).substring(0, 25);
+        memset(buf, ' ', 26*3);
+        buf[26*3] = 0;
+        str = String(*it).substring(0, 26);
         tftset(TFTSEC_LIST_CUR, str);
         if (genreSelected)
           free(genreSelected);
@@ -294,41 +331,49 @@ std::set<const char*>::iterator current;
         if (it != genreList.begin())
         {
           --it;
-          str = String(*it).substring(0, 25);
+          str = utf8ascii(String(*it).c_str()).substring(0, 26);
+          memcpy(buf + 52, str.c_str(), str.length());
           if (it != genreList.begin())
           {
             --it;
-            str = String(*it).substring(0, 25) + "\n" + str;
+            str = utf8ascii(String(*it).c_str()).substring(0, 26);
+            memcpy(buf + 26, str.c_str(), str.length());
+            //str = String(*it).substring(0, 25) + "\n" + str;
             if (it != genreList.begin())
             {
               --it;
-              str = String(*it).substring(0, 25) + "\n" + str;              
+              str = utf8ascii(String(*it).c_str()).substring(0, 26);
+              memcpy(buf, str.c_str(), str.length());
+              //str = String(*it).substring(0, 25) + "\n" + str;              
             }
-            else
-              str = String("\n") + str;
           }
-          else
-            str = String("\n\n") + str;
         }
         else
-          str = "\n\n\n";
-        tftset(TFTSEC_LIST_TOP, str);
+          buf[0] = 0; //str = "\n\n\n";
+        tftset(TFTSEC_LIST_TOP, buf);
       }
       else
       {
         
       }
       it = current;
-      str = String("");
+      buf[0] = 0;
       ++it;
       if (it != genreList.end())
       {
-        str = String(*it).substring(0, 25);
+        memset(buf, ' ', 26 * 2);
+        buf[26 * 2] = 0;
+        str = utf8ascii(String(*it).c_str()).substring(0, 26);
+        memcpy(buf, str.c_str(), str.length());
+        //str = String(*it).substring(0, 25);
         ++it;
         if (it != genreList.end())
-          str = str + String("\n") + String(*it).substring(0, 25);  
+        {
+          str = utf8ascii(String(*it).c_str()).substring(0, 26);
+          memcpy(buf + 26, str.c_str(), str.length());
+        }
       }
-      tftset(TFTSEC_LIST_BOT, str);
+      tftset(TFTSEC_LIST_BOT, buf);
 }
 
 
@@ -646,7 +691,7 @@ class RadioMenuEntry {
     };
 
     String getDisplayString(int8_t delta=0, bool full=true) {
-      String ret = String("");
+      String ret = delta>0?String(""):String("                          ");
       RadioMenuEntry *entry = this;
       while ((delta != 0) && (entry != NULL)) {
         if (delta > 0) {
@@ -1035,9 +1080,12 @@ class RadioMenu {
         //Serial.printf("current menu display string is: %s\r\n", str.c_str());
         tftset(TFTSEC_LIST_CUR, str);
         _currentEntry->printValueString();
-        str = _currentEntry->getDisplayString(-3) + String("\n") + _currentEntry->getDisplayString(-2) + String("\n") + _currentEntry->getDisplayString(-1); 
+        str = _currentEntry->getDisplayString(-3) + /*String("\n") + */
+              _currentEntry->getDisplayString(-2) + /*String("\n") +*/ 
+              _currentEntry->getDisplayString(-1); 
         tftset(TFTSEC_LIST_TOP, str);
-        str = _currentEntry->getDisplayString(1) + String("\n") + _currentEntry->getDisplayString(2);
+        str = _currentEntry->getDisplayString(1) + /* String("\n") + */
+              _currentEntry->getDisplayString(2);
         tftset(TFTSEC_LIST_BOT, str);
 
       } else {
