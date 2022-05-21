@@ -16,9 +16,9 @@
 extern void claimSPI(const char *name);
 extern void releaseSPI(void);
 
-// Follwing function must be defined elsewhere to allow debug output
-extern char* dbgprint ( const char* format, ... );
-
+// Follwing function must be defined elsewhere to allow debug output and store config info to NVS
+extern int DEBUG;
+esp_err_t nvssetstr ( const char* key, String val );
 
 class Genres;
 

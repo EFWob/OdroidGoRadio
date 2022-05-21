@@ -271,6 +271,8 @@ void        gettime() ;
 void        reservepin ( int8_t rpinnr ) ;
 void        claimSPI ( const char* p ) ;                // Claim SPI bus for exclusive access
 void        releaseSPI() ;                              // Release the claim
+void        claimTFT ( const char* p ) ;                // Claim TFT for exclusive access
+void        releaseTFT() ;                              // Release the claim
 char        utf8ascii ( char ascii ) ;                  // Convert UTF8 char to normal char
 void        utf8ascii_ip ( char* s ) ;                  // In place conversion full string
 String      utf8ascii ( const char* s ) ;
@@ -412,6 +414,7 @@ TaskHandle_t      maintask ;                             // Taskhandle for main 
 TaskHandle_t      xplaytask ;                            // Task handle for playtask
 TaskHandle_t      xspftask ;                             // Task handle for special functions
 SemaphoreHandle_t SPIsem = NULL ;                        // For exclusive SPI usage
+SemaphoreHandle_t TFTsem = NULL ;                        // For exclusive TFT usage
 hw_timer_t*       timer = NULL ;                         // For timer
 char              timetxt[9] ;                           // Converted timeinfo
 char              cmd[130] ;                             // Command from MQTT or Serial
@@ -711,6 +714,7 @@ class VS1053
     int8_t        shutdown_pin ;                   // Pin where the shutdown line is connected
     int8_t        shutdownx_pin ;                  // Pin where the shutdown (inversed) line is connected
     uint8_t       curvol ;                         // Current volume setting 0..100%
+    bool          fastMode = false ;               // Is fast SPI available?
     const uint8_t vs1053_chunk_size = 32 ;
     // SCI Register
     const uint8_t SCI_MODE          = 0x0 ;
@@ -802,6 +806,10 @@ class VS1053
     inline uint8_t  getVolume() const                    // Get the current volume setting.
     { // higher is louder.
       return curvol ;
+    }
+    inline bool isFastMode() 
+    {
+      return fastMode;
     }
     void     printDetails ( const char *header ) ;       // Print config details to serial output
     void     softReset() ;                               // Do a soft reset
@@ -995,7 +1003,11 @@ void VS1053::begin()
     wram_write ( 0xC019, 0 ) ;                            // GPIO ODATA = 0
     delay ( 100 ) ;
     //printDetails ( "After test loop" ) ;
+
+    
     softReset() ;                                         // Do a soft reset
+
+    
     // Switch on the analog parts
     write_register ( SCI_AUDATA, 44100 + 1 ) ;            // 44.1kHz + stereo
     // The next clocksetting allows SPI clocking at 5 MHz, 4 MHz is safe then.
@@ -1004,7 +1016,7 @@ void VS1053::begin()
     //SPI Clock to 4 MHz. Now you can set high speed SPI clock.
     VS1053_SPI = SPISettings ( 5000000, MSBFIRST, SPI_MODE0 ) ;
     write_register ( SCI_MODE, _BV ( SM_SDINEW ) | _BV ( SM_LINE1 ) ) ;
-    testComm ( "Fast SPI, Testing VS1053 read/write registers again..." ) ;
+    fastMode = testComm ( "Fast SPI, Testing VS1053 read/write registers again..." ) ;
     delay ( 10 ) ;
     await_data_request() ;
     endFillByte = wram_read ( 0x1E06 ) & 0xFF ;
@@ -1427,6 +1439,49 @@ void releaseSPI()
 
 
 //**************************************************************************************************
+//                                      C L A I M T F T                                            *
+//**************************************************************************************************
+// Claim the TFT.  Uses FreeRTOS semaphores.                                                       *
+// If the semaphore cannot be claimed within the time-out period, the function continues without   *
+// claiming the semaphore.  This is incorrect but allows debugging.                                *
+//**************************************************************************************************
+void claimTFT ( const char* p )
+{
+  const              TickType_t ctry = 10 ;                 // Time to wait for semaphore
+  uint32_t           count = 0 ;                            // Wait time in ticks
+  static const char* old_id = "none" ;                      // ID that holds the tft
+
+  while ( xSemaphoreTake ( TFTsem, ctry ) != pdTRUE  )      // Claim TFT
+  {
+    if ( count++ > 25 )
+    {
+      dbgprint ( "TFT semaphore not taken within %d ticks by CPU %d, id %s",
+                 count * ctry,
+                 xPortGetCoreID(),
+                 p ) ;
+      dbgprint ( "Semaphore is claimed by %s", old_id ) ;
+    }
+    if ( count >= 100 )
+    {
+      return ;                                               // Continue without semaphore
+    }
+  }
+  old_id = p ;                                               // Remember ID holding the semaphore
+}
+
+
+//**************************************************************************************************
+//                                   R E L E A S E T F T                                           *
+//**************************************************************************************************
+// Free the the SPI bus.  Uses FreeRTOS semaphores.                                                *
+//**************************************************************************************************
+void releaseTFT()
+{
+  xSemaphoreGive ( TFTsem ) ;                            // Release TFT
+}
+
+
+//**************************************************************************************************
 //                                      Q U E U E F U N C                                          *
 //**************************************************************************************************
 // Queue a special function for the play task.                                                     *
@@ -1464,16 +1519,20 @@ void tftset ( uint16_t inx, const char *str )
 {
   if ( inx < TFTSECS )                                  // Segment available on display
   {
+    claimTFT("tftset");
     if ( str )                                          // String specified?
     {
 #if defined(ARDUINO_ODROID_ESP32)
       String s = String ( str ) ;
+      if (TFTSEC_FAV_BOT == inx)
+        dbgprint("SET TFT BOT=%s", str);
       tftset ( inx, s );
 #else
       tftdata[inx].str = String ( str ) ;               // Yes, set string
 #endif
     }
     tftdata[inx].update_req = true ;                    // and request flag
+    releaseTFT();
   }
 }
 
@@ -3262,7 +3321,9 @@ void tftlog ( const char *str )
   if ( tft )                                           // TFT configured?
   {
     dsp_println ( str ) ;                              // Yes, show error on TFT
+    claimTFT("update");
     dsp_update() ;                                     // To physical screen
+    releaseTFT();
   }
 }
 
@@ -3466,6 +3527,7 @@ void setup()
 #endif
   maintask = xTaskGetCurrentTaskHandle() ;               // My taskhandle
   SPIsem = xSemaphoreCreateMutex(); ;                    // Semaphore for SPI bus
+  TFTsem = xSemaphoreCreateMutex(); ;                    // Semaphore for TFT
   pi = esp_partition_find ( ESP_PARTITION_TYPE_DATA,     // Get partition iterator for
                             ESP_PARTITION_SUBTYPE_ANY,   // the NVS partition
                             partname ) ;
@@ -3547,14 +3609,18 @@ void setup()
 #else
       dsp_setCursor ( 0, 0 ) ;                           // Top of screen
 #endif
-      dsp_print ( "Starting..." "\n" "Version:" ) ;
+      p = dbgprint ("Starting %s...", AUDIOMODE_BLUETOOTH == audiomode?"Bluetooth":"Radio");
+      dsp_println(p);
+      dsp_print ( "Version:" ) ;
       strncpy ( tmpstr, VERSION, 16 ) ;                  // Limit version length
       dsp_println ( tmpstr ) ;
       dsp_println ( "By Ed Smallenburg" ) ;
 #if defined(ARDUINO_ODROID_ESP32)
       dsp_println ( "Odroid-Port: Erik Foltin" ) ;                           // Top of screen
 #endif      
+      claimTFT("update");
       dsp_update() ;                                     // Show on physical screen
+      releaseTFT();
     }
   }
   if ( ini_block.tft_bl_pin >= 0 )                       // Backlight for TFT control?
@@ -3580,17 +3646,26 @@ void setup()
                                NAME ) ;
   vs1053player->begin() ;                                // Initialize VS1053 player
   delay(10);
+  if (AUDIOMODE_BLUETOOTH == audiomode)
+    if (!vs1053player->isFastMode())
+    {
+      p = dbgprint("FAST SPI needed for BT: switching to Radio mode...");
+      tftlog(p);
+      delay(2000);
+      audiomode = AUDIOMODE_RADIO;
+    }
 #if !defined(ARDUINO_ODROID_ESP32)
   setup_CH376() ;                                        // Init CH376 if configured
 #endif
   p = dbgprint ( "Connect to WiFi" ) ;                   // Show progress
   tftlog ( p ) ;                                         // On TFT too
-  NetworkFound = connectwifi() ;                         // Connect to WiFi network
+  if (AUDIOMODE_RADIO == audiomode)
+    NetworkFound = connectwifi() ;                         // Connect to WiFi network
   dbgprint ( "Start server for commands" ) ;
-  cmdserver.begin() ;                                    // Start http server
   if ( NetworkFound )                                    // OTA and MQTT only if Wifi network found
   {
     dbgprint ( "Network found. Starting mqtt and OTA" ) ;
+    cmdserver.begin() ;                                    // Start http server
     mqtt_on = ( ini_block.mqttbroker.length() > 0 ) &&   // Use MQTT if broker specified
               ( ini_block.mqttbroker != "none" ) ;
     ArduinoOTA.setHostname ( NAME ) ;                    // Set the hostname
@@ -4399,7 +4474,11 @@ void mp3loop()
   uint32_t        qspace ;                               // Free space in data queue
   String          tmp ;                                  // Needed for station name in pref
   int             inx ;                                  // Indexe of "#" in station name
-
+  
+  if (AUDIOMODE_BLUETOOTH == audiomode)
+  {
+      return;
+  }
   // Try to keep the Queue to playtask filled up by adding as much bytes as possible
   if ( datamode & ( INIT | HEADER | DATA |               // Test op playing
                     METADATA | PLAYLISTINIT |
@@ -5675,7 +5754,7 @@ void displayinfo ( uint16_t inx )
       dsp_setCursor ( x, p->y ) ;                          // Prepare to show the info
       dsp_println ( buf ) ;                                // Show the string
     }
-    // dbgprint("Print tftsec[%d]=\"%s\"", inx, buf);
+    dbgprint("Print tftsec[%d]=\"%s\"", inx, buf);
   }
 
 #else
@@ -5771,8 +5850,10 @@ bool handle_tft_txt()
 #endif    
     if ( tftdata[i].update_req )                          // Refresh requested?
     {
+      claimTFT("text");
       displayinfo ( i ) ;                                 // Yes, do the refresh
       dsp_update() ;                                      // Updates to the screen
+      releaseTFT();
       tftdata[i].update_req = false ;                     // Reset request
       return true ;                                       // Just handle 1 request
     }

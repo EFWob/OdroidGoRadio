@@ -4,12 +4,16 @@
 #include <ArduinoJson.h>
 #include "src/libraries/Display.h"
 #include "genres.h"
-#define ODROIDRADIO_VERSION "202006182336"
+#include <BluetoothA2DPSink.h>
+#define ODROIDRADIO_VERSION_OLD "202006182336"
+#define ODROIDRADIO_VERSION "20220519"
 
 #if defined(ARDUINO_M5STACK_FIRE)
 #define ARDUINO_ODROID_ESP32
 #endif
 
+#define AUDIOMODE_RADIO     0
+#define AUDIOMODE_BLUETOOTH 1
 // Data to display.  There are TFTSECS sections
 #define TFTSEC_TOP          0             // Index for Top line, normal play
 #define TFTSEC_TXT          1             // Index for Radiotext, normal play
@@ -32,9 +36,9 @@
 #define TFTSEC_SPECTRUM    17             // Spectrum Analyzer
 #define TFTSEC_FAV_BUT2    18             // Favorite Channels select button display ("<1> <2>"... on top line below buttons in not Flipped Display) 
 //#define TFTSEC_GLIST_HLP2  19             // Help text 2 for genre selection list
+#define TFTSEC_BLUETOOTH 20
 
-
-#define TFTSECS 20
+#define TFTSECS 21
 #define DEBUG_BUFFER_SIZE 150
 
 extern ILI9341 *tft;// = NULL;
@@ -78,7 +82,8 @@ extern scrseg_struct     tftdata[TFTSECS];
   {false, WHITE, 106, 8, "<A> to Save  <B> to Cancel", true,2},
   {false, TFT_ORANGE, 16, 64, "  ** SPECTRUM ANALYZER **", true, 2},
   { false, WHITE,   106,  8, "<1>    <2>       <3>   <4>", true,2 },                            // Preset Keys in Upside-Mode
-  {false, WHITE, 106, 8, "<A> for channels", true,2}
+  {false, WHITE, 106, 8, "<A> for channels", true,2},
+  {false, BLUE, 2, 8, "Bluetooth", true, 100}
   
 } ;
 #endif
@@ -113,4 +118,7 @@ extern void doGenre(String param, String value);
 extern void doMonkeyStart(int ivalue);
 
 extern int DEBUG;
+extern int audiomode;
+extern BluetoothA2DPSink a2dp_sink;
+
 #endif
