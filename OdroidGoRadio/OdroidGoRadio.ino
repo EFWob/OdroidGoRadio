@@ -1394,6 +1394,21 @@ void nvschkey ( const char* oldk, const char* newk )
   }
 }
 
+//**************************************************************************************************
+//                                      N V S D E L K E Y                                          *
+//**************************************************************************************************
+// Delerte a keyname in in nvs.                                                                    *
+//**************************************************************************************************
+void nvsdelkey ( const char* oldk )
+{
+  String curcont ;                                         // Current contents
+
+  if ( nvssearch ( oldk ) )                                // Old key in nvs?
+  {
+    nvs_erase_key ( nvshandle, oldk ) ;                    // Remove key
+  }
+}
+
 
 //**************************************************************************************************
 //                                      C L A I M S P I                                            *
@@ -4477,6 +4492,7 @@ void mp3loop()
   
   if (AUDIOMODE_BLUETOOTH == audiomode)
   {
+      bt_data_play();
       return;
   }
   // Try to keep the Queue to playtask filled up by adding as much bytes as possible
@@ -4628,7 +4644,8 @@ void mp3loop()
         hostreq = true ;                                  // Force this station as new preset
       }
       else
-      {
+      {    
+
         // This preset is not available, return to preset 0, will be handled in next mp3loop()
         dbgprint ( "No host for this preset" ) ;
         ini_block.newpreset = 0 ;                         // Wrap to first station
@@ -4689,7 +4706,7 @@ void loop()
 #endif  
   if ( resetreq )                                   // Reset requested?
   {
-    delay ( 1000 ) ;                                // Yes, wait some time
+    //delay ( 1000 ) ;                                // Yes, wait some time
     ESP.restart() ;                                 // Reboot
   }
   scanserial() ;                                    // Handle serial input

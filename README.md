@@ -1,5 +1,9 @@
 # Odroid-Go-Radio
 ## Latest updates
+**220527**
+You can now use your Odroid-Go-Radio as [Bluetooth stream player](#using bluetooth). 
+
+**2021**
 You can now play stations from genre lists (i. e. Pop, Rock, etc...) that are synchronized using a public radio database server (https://www.radio-browser.info/#/). 
 This database has more than 27,000 stations organised in different categories (by region or genre tags). With this addition, you can 
 download stations from that radio database as given by their genre-tag. As a result you can have more station lists
@@ -60,6 +64,7 @@ The connection to the VS1053 is done through the Odroid-header pins as follows (
 	* Base64 (by Arturo Guadalupi, v1.0.0) (new for this release)
 	* ArduinoJson (by Benoit Blanchon, v6.13.0) (new for this release)
 	* LittleFS_esp32 (by lorol v1.0.6) (new for this release) (likely to become part of the ESP32-Core v2.x.x)
+	* https://github.com/pschatzmann/ESP32-A2DP.git (v1.0.7) for Bluetooth-playpack. It looks like this library is not available from the Arduino library manager. You have to download it to your libraries folder fom github yourself.
 
 * Other versions might work too, its just untested. Please let me know if you encounter any difficulties.
 * Select Board "M5Stack-FIRE" and Partition Scheme "Large SPIFFS". In fact, any board definition should be fine, however the ones with
@@ -446,4 +451,21 @@ down to brightness 1, which is still pretty dark).
 will adjust according to the elapsed time.
 
 
+## Using Bluetooth
+### Preconditions
+* You need to install one additional library (pschatzmann/ESP32-ADP) before compiling. It looks like this library is not available from the Arduino library manager. You have to download it to your libraries folder fom github (https://github.com/pschatzmann/ESP32-A2DP.git) yourself.
+* I suggest to use the Board setting "M5Stack-FIRE" and Partition Scheme "Large SPIFFS" for compilation.
 
+### Limitations
+* You can not start BT and WiFi at the same time. You have to decide (at startup) wether you want to use BT or Radio functionality.
+* You can also not switch from one mode to another without a reset (SW or PowerOn).
+
+### Bluetooth playback
+* The default mode at startup can be defined using [Menu 1](#menu-1-settings) There are a few more entries now  in this menu:
+	- *Audio at start*: can be toggled between __Radio__ (default) and __Bluetooth__
+	- *Connect last source*: if set to __yes__ in BT mode the last known BT source will be connected if awailable (defaults to __no__)
+	- *BT volume*: can be used to set a different start volume for Bluetooth mode. Defaults to __100__
+* At startup time, you can press Button __(B)__ to switch to the other mode, i. e. if __radio__ is defined in the configuration settings, you can start Bluetooth mode (and vice versa). Please observe the screen, the first line at start should now read __Starting Radio__ or __Starting Bluetooth__. If you see this line, you can release button __(B)__ again (roundabout after less than one second).
+
+The following will apply if the radio successfully started in Bluetooth mode:
+* 

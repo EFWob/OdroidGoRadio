@@ -5,8 +5,9 @@
 #include "src/libraries/Display.h"
 #include "genres.h"
 #include <BluetoothA2DPSink.h>
-#define ODROIDRADIO_VERSION_OLD "202006182336"
-#define ODROIDRADIO_VERSION "20220519"
+#define ODROIDRADIO_VERSION_OLDER "202006182336"
+#define ODROIDRADIO_VERSION_OLD "20220519"
+#define ODROIDRADIO_VERSION "20220527"
 
 #if defined(ARDUINO_M5STACK_FIRE)
 #define ARDUINO_ODROID_ESP32
@@ -14,6 +15,7 @@
 
 #define AUDIOMODE_RADIO     0
 #define AUDIOMODE_BLUETOOTH 1
+#define AUDIOMODE_UNKNOWN   255
 // Data to display.  There are TFTSECS sections
 #define TFTSEC_TOP          0             // Index for Top line, normal play
 #define TFTSEC_TXT          1             // Index for Radiotext, normal play

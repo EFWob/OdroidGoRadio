@@ -101,7 +101,7 @@ String genreStation;
 uint32_t spectrumBlockTime = 0;
 
 int listSelectedPreset = 0;
-int audiomode = AUDIOMODE_RADIO;
+int audiomode = AUDIOMODE_UNKNOWN;
 
 int theMonkey = 0;
 
@@ -504,6 +504,73 @@ struct odroidRadioConfig2020 {
   } equalizer;
 };
 
+struct odroidRadioConfig20220519 {
+  struct {
+    int16_t min = 50;
+    int16_t max = 100;
+    int16_t start = 80;
+    int16_t useStart = 1;
+    int16_t life = 0;
+  } volume;
+  struct {
+    int16_t preset = 3;
+    int16_t volume = 1;
+    int16_t chanList = 15;
+    int16_t menu = 15;
+    int16_t brightness = 4;
+    int16_t brightnessUp = 5; 
+  } showtime;
+
+  struct {
+    int16_t time = 6;           // 6 * 5 = 30 min
+    int16_t volume = 80;        // initial volume
+    int16_t offAfter1Min = 1;   // display off after 1 minute idle time in sleep mode?
+  } sleep;
+  struct {
+    int16_t max = 255;            // maximum Backlight value
+    int16_t min = 255;            // minimum backlight value (if equal to max, effectively no dimming will happen)
+  } backlight;
+
+  struct {
+    int16_t closeListOnSelect = 1;
+    int16_t favBanks = 3;
+    int16_t ignoreSD = 1;
+    int16_t keySpeed = 2;
+    int16_t debug = 1;
+    int16_t flipped = 1;
+  } misc;
+  struct {
+    int16_t preset = 1;
+  } start;
+  struct {
+    int16_t showSpectrumAnalyzer = 0;
+    int16_t spectrumAnalyzerSpeed = 3;
+    int16_t spectrumAnalyzerDynamic = 0;
+    int16_t spectrumAnalyzerPeaks = 1;
+    int16_t spectrumAnalyzerSegmentWidth = -1;
+    int16_t spectrumAnalyzerWidth = 3;
+    int16_t spectrumAnalyzerText = 0;
+    int16_t spectrumAnalyzerPeakWidth = -1;
+    int16_t spectrumAnalyzerSegmentColor = 0;
+    int16_t spectrumAnalyzerBarColor = 5;  
+    int16_t spectrumAnalyzerFastDrop = 1;
+    int16_t eq0 = 0;
+    int16_t eq1 = 0;
+    int16_t eq2 = 0;
+    int16_t eq3 = 0;
+    int16_t eq4 = 0;
+    int16_t eq5 = 0;
+    int16_t eq6 = 0;
+    int16_t eq7 = 0;
+  } equalizer;
+  struct {
+    int16_t audioMode = 0;
+    int16_t autoConnect = 0;
+    int16_t volume = 100;
+  } bluetooth;
+};
+
+
 struct {
   struct {
     int16_t min = 50;
@@ -567,6 +634,7 @@ struct {
     int16_t audioMode = 0;
     int16_t autoConnect = 0;
     int16_t volume = 100;
+    int16_t volumeReset = 0;
   } bluetooth;
 } odroidRadioConfig;
 
@@ -1344,6 +1412,9 @@ class RadioMenu1: public RadioMenu {
       addEntry(new RadioMenuEntryAudioMode("Audio at start", &odroidRadioConfig.bluetooth.audioMode));
       addEntry(new RadioMenuEntryBool("Connect last source", &odroidRadioConfig.bluetooth.autoConnect));
       addEntry(new RadioMenuEntry("BT volume", &odroidRadioConfig.bluetooth.volume, 0, 100));
+      //addEntry(new RadioMenyEntry("Reset on VolMaxMin", &odroidRadioConfig.bluetooth.volumeReset, 0, 10));
+      addEntry(new RadioMenuEntry("Reset on Vol-Max/Min", &odroidRadioConfig.bluetooth.volumeReset, 0, 10));
+
       if (AUDIOMODE_RADIO == audiomode)
         addEntry(new RadioMenuEntry((char *)(String("BTW: IP is ") + ipaddress).c_str()));
       else if (AUDIOMODE_BLUETOOTH == audiomode)
@@ -1808,6 +1879,7 @@ void handleBtnAB(uint8_t group, bool released = false) {
       radioStatemachine.setState(RADIOSTATE_RUN);
     return; 
   }
+  radioStatemachine.resetStateTime();
   if ((RADIOSTATE_MENU == radioState) || (RADIOSTATE_MENU_DONE == radioState)) {
     if (RADIOSTATE_MENU == radioState)
       radioStatemachine.menuButton(group?MENU_B:MENU_A,0);
@@ -1949,6 +2021,7 @@ String genreChannel(int id)
 void handleBtnMemory(int id) {
 int radioState = radioStatemachine.getState();
 String str;
+    radioStatemachine.resetStateTime();
     if (AUDIOMODE_RADIO != audiomode)
       return;
     if (!odroidRadioConfig.misc.flipped)
@@ -2019,6 +2092,7 @@ int channelY;
     return channelX;
   if (!odroidRadioConfig.misc.flipped)
     direction = -direction;
+  radioStatemachine.resetStateTime();  
   if (RADIOSTATE_MENU == radioState) {
     radioStatemachine.menuButton((1 == direction)?MENU_DN:MENU_UP, repeats);
   }
@@ -2097,6 +2171,30 @@ int channelY;
   return channelX;
 }
 
+
+void checkReset(uint32_t currentTime) {
+  static uint32_t resetTime = 0;
+  if (0 == odroidRadioConfig.bluetooth.volumeReset)
+    resetTime = 0;
+  else if ((0 != currentTime) && (resetTime != 0))
+  {
+    //uint32_t maxDelta = 1000ul * (uint32_t)odroidRadioConfig.bluetooth.volumeReset;
+    if (currentTime - resetTime > 1000ul * (uint32_t)odroidRadioConfig.bluetooth.volumeReset)
+    {
+      dbgprint("Reset!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+      if (AUDIOMODE_BLUETOOTH == audiomode)
+        nvssetstr("resetflag", "radio");
+      else
+        nvssetstr("resetflag", "bluetooth");
+      resetTime = 0;
+      resetreq = true;
+    }
+    //else dbgprint("Delta: %d, max: %d", currentTime - resetTime, maxDelta);
+  }
+  else
+    resetTime = currentTime;
+}
+
 void handleBtnX(int dir, bool onLongReleased = false, uint16_t repeats = 0) {
 int16_t radioState = radioStatemachine.getState();
     if (onLongReleased) {
@@ -2108,6 +2206,9 @@ int16_t radioState = radioStatemachine.getState();
       return;
     if (!odroidRadioConfig.misc.flipped)
       dir = -dir;
+    //dbgprint("Repeats: %d", repeats);
+    if (repeats == 0)
+      checkReset(0);
     if (RADIOSTATE_MENU == radioState) {
       radioStatemachine.menuButton((1 == dir)?MENU_RIGHT:MENU_LEFT, repeats);
     } 
@@ -2116,12 +2217,18 @@ int16_t radioState = radioStatemachine.getState();
       char s[30];
       if (dir > 0) {
         if (ini_block.reqvol >= odroidRadioConfig.volume.max)
+        {
           analyzeCmd("volume", String(odroidRadioConfig.volume.max).c_str());
+          checkReset(millis());
+        }
         else  
           analyzeCmd("upvolume", "1");
       } else {
         if (ini_block.reqvol <= odroidRadioConfig.volume.min)
+        {
           analyzeCmd("volume", String(odroidRadioConfig.volume.min).c_str());
+          checkReset(millis());
+        }
         else
           analyzeCmd("downvolume", "1");
       }
@@ -2137,12 +2244,18 @@ int16_t radioState = radioStatemachine.getState();
         radioStatemachine.setState(RADIOSTATE_VOLUME);
       if (dir > 0) {
         if (ini_block.reqvol >= odroidRadioConfig.volume.max)
+        {
           analyzeCmd("volume", String(odroidRadioConfig.volume.max).c_str());
+          checkReset(millis());
+        }
         else  
           analyzeCmd("upvolume", "1");
       } else {
         if (ini_block.reqvol <= odroidRadioConfig.volume.min)
+        {
           analyzeCmd("volume", String(odroidRadioConfig.volume.min).c_str());
+          checkReset(millis());
+        }
         else
           analyzeCmd("downvolume", "1");
       }
@@ -2259,6 +2372,17 @@ bool nvsgetOdroid ()
           memcpy(&odroidRadioConfig, &odroidRadioConfigOld, len);
         }
       }
+      else if (0 == strcmp(versionStr, "20220519"))
+      {
+        struct odroidRadioConfig20220519 odroidRadioConfigOld;
+        len = sizeof(odroidRadioConfigOld);
+        dbgprint("Migrate config from v\"%s\"", versionStr);
+        nvserr == nvs_get_blob(nvshandleOdroid, "config", &odroidRadioConfigOld, &len);
+        if (ESP_OK == nvserr)
+        {
+          memcpy(&odroidRadioConfig, &odroidRadioConfigOld, len);
+        }
+      }
       else if (ESP_OK == nvserr) 
         {
           nvsclearOdroid(); 
@@ -2309,13 +2433,23 @@ void odroidSetup() {
     else
       tft->setRotation(1);
 */
-    audiomode = odroidRadioConfig.bluetooth.audioMode?AUDIOMODE_BLUETOOTH:AUDIOMODE_RADIO;
-    if (LOW == digitalRead(33))
+    String rstflag = nvsgetstr("resetflag");
+    if ((rstflag == "radio") || (rstflag == "bluetooth"))
     {
-      if (AUDIOMODE_RADIO == audiomode)
-        audiomode = AUDIOMODE_BLUETOOTH;
-      else if (AUDIOMODE_BLUETOOTH == audiomode)
-        audiomode = AUDIOMODE_RADIO;
+        dbgprint("Reset flag found!x=%s", rstflag.c_str());
+        nvsdelkey("resetflag");
+        audiomode=rstflag.c_str()[0] == 'r'?AUDIOMODE_RADIO:AUDIOMODE_BLUETOOTH;
+    }
+    if (AUDIOMODE_UNKNOWN == audiomode)
+    {
+      audiomode = odroidRadioConfig.bluetooth.audioMode?AUDIOMODE_BLUETOOTH:AUDIOMODE_RADIO;
+      if (LOW == digitalRead(33))
+      {
+        if (AUDIOMODE_RADIO == audiomode)
+          audiomode = AUDIOMODE_BLUETOOTH;
+        else if (AUDIOMODE_BLUETOOTH == audiomode)
+          audiomode = AUDIOMODE_RADIO;
+      }
     }
     if (LOW == digitalRead(32)) {
       dsp_erase();
@@ -2412,30 +2546,100 @@ int16_t iniVolume;
 }
 
 
-void bt_data_stream(const uint8_t *data, uint32_t length) {
-static uint32_t lastReport = 0;
-static uint32_t totalBytes = 0, chunks = 0;
-static uint32_t maxTransfertime = 0;
-uint32_t x;
-  totalBytes += length;
-  chunks++;
-  x = millis();
-  vs1053player->playChunk((uint8_t *)data, length);
-  x = millis() - x;
-  if (x > maxTransfertime)
-    maxTransfertime = x;
-  if (millis() - lastReport > 2000)  
-  {
-    dbgprint("Newly rcvd BT-Bytes: %ld, in %ld chunks (average: %ld), max. Transfertime: %d", 
-      totalBytes, chunks, totalBytes / chunks, maxTransfertime);
-    totalBytes = chunks = maxTransfertime = 0;
-    lastReport = millis();
-  }
-}
-
+SemaphoreHandle_t BTsem = NULL ;                        // For exclusive BT buffer usage
 String bt_artist;
 String bt_title;
 String bt_album;
+struct bt_chunk
+{
+  void *data;
+  uint32_t length;
+};
+
+std::vector<bt_chunk>bt_chunks;
+
+//**************************************************************************************************
+//                                      C L A I M B T C H U N K                                    *
+//**************************************************************************************************
+// Claim the BT buffer.  Uses FreeRTOS semaphores.                                                 *
+// If the semaphore cannot be claimed within the time-out period, the function continues without   *
+// claiming the semaphore.  This is incorrect but allows debugging.                                *
+//**************************************************************************************************
+void claimBTchunk ( const char* p )
+{
+  const              TickType_t ctry = 10 ;                 // Time to wait for semaphore
+  uint32_t           count = 0 ;                            // Wait time in ticks
+  static const char* old_id = "none" ;                      // ID that holds the bus
+
+  while ( xSemaphoreTake ( BTsem, ctry ) != pdTRUE  )      // Claim BT buffer
+  {
+    if ( count++ > 25 )
+    {
+      dbgprint ( "BT semaphore not taken within %d ticks by CPU %d, id %s",
+                 count * ctry,
+                 xPortGetCoreID(),
+                 p ) ;
+      dbgprint ( "Semaphore is claimed by %s", old_id ) ;
+    }
+    if ( count >= 100 )
+    {
+      return ;                                               // Continue without semaphore
+    }
+  }
+  old_id = p ;                                               // Remember ID holding the semaphore
+}
+
+
+//**************************************************************************************************
+//                                   R E L E A S E B T C H U N K                                   *
+//**************************************************************************************************
+// Free the the BT buffer.  Uses FreeRTOS semaphores.                                              *
+//**************************************************************************************************
+void releaseBTchunk()
+{
+  xSemaphoreGive ( BTsem ) ;                            // Release BT buffer
+}
+
+
+
+
+void bt_data_play() {
+static int maxSize = 0;
+int chunksize;
+  claimBTchunk("play");
+  while ((chunksize = bt_chunks.size()) > 0)
+  {
+    bt_chunk chunk = bt_chunks[0];
+    bt_chunks.erase(bt_chunks.begin());
+    releaseBTchunk();
+    if (chunksize > maxSize)
+      dbgprint("Max number of chunks in BT-buffer has increased to: %d", maxSize = chunksize);
+    if (chunk.data)
+    {
+      vs1053player->playChunk((uint8_t *)chunk.data, chunk.length);
+      free(chunk.data);
+    }
+    claimBTchunk("play");
+  }
+  releaseBTchunk();
+}
+
+
+void bt_data_stream(const uint8_t *data, uint32_t length) {
+void *p;
+  p = malloc(length);
+  if (p)
+  {
+    bt_chunk chunk;
+    chunk.length = length;
+    chunk.data = p;
+    memcpy(p, data, length);
+    claimBTchunk("fill");
+    bt_chunks.push_back(chunk);
+    releaseBTchunk();
+  }
+}
+
 
 void showBtText()  
 {
@@ -2506,7 +2710,7 @@ char s[30];
   0x52, 0x49, 0x46, 0x46, 0xff, 0xff, 0xff, 0xff, 0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
   0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x44, 0xac, 0x00, 0x00, 0x10, 0xb1, 0x02, 0x00, 
   0x04, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61, 0xff, 0xff, 0xff, 0xff };    
-
+  BTsem = xSemaphoreCreateMutex(); ;                    // Semaphore for SPI bus
   ini_block.reqvol = odroidRadioConfig.bluetooth.volume;
   if (ini_block.reqvol >= odroidRadioConfig.volume.max)
     analyzeCmd("volume", String(odroidRadioConfig.volume.max).c_str());
