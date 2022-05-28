@@ -1,7 +1,7 @@
 # Odroid-Go-Radio
 ## Latest updates
-**220527**
-You can now use your Odroid-Go-Radio as [Bluetooth stream player](#using bluetooth). 
+**20220528**
+You can now use your Odroid-Go-Radio as [Bluetooth stream player](#using-bluetooth). 
 
 **2021**
 You can now play stations from genre lists (i. e. Pop, Rock, etc...) that are synchronized using a public radio database server (https://www.radio-browser.info/#/). 
@@ -458,11 +458,12 @@ will adjust according to the elapsed time.
 ### Entering Bluetooth playback
 * The default mode at startup can be defined using [Menu 1](#menu-1-settings) There are a few more entries now  in this menu:
 	- *Audio at start*: can be toggled between __Radio__ (default) and __Bluetooth__
-	- *Connect last BT-source*: if set to __yes__ then in BT mode the last known BT source will be connected if awailable (defaults to __no__)
+	- *Connect last BT-source*: if set to __yes__ then in BT mode the last known BT source will be connected if available (defaults to __no__)
 	- *BT volume*: can be used to set a different start volume for Bluetooth mode. Defaults to __100__
 	- *Reset on Vol-Max/Min*: sets a timeout (in seconds) after which the radio will do a SW-reset if the Vol-Up or Vol-Dn button are still pressed even though if already at the maximum (Vol-Up) or minimum (Vol-Dn) volume level. Reset will toggle to the other audio-mode (from Bluetooth to Radio or vice versa). If set to __0__ (default) this SW-reset will be disabled.
 * At startup time, you can press Button __(B)__ to switch to the other mode, i. e. if __radio__ is defined in the configuration settings, you can start Bluetooth mode (and vice versa). Please observe the screen, the first line at start should now read __Starting Radio__ or __Starting Bluetooth__. If you see this line, you can release button __(B)__ again (roundabout after less than one second).
-* A SW-reset (as described above with VolUp/VolDn) will override the *Audio at start*-setting (and consequently also ignore the state of button (B))
+* A SW-reset (as described above with Vol-Up/Vol-Dn) will override the *Audio at start*-setting (and consequently also ignore the state of button (B))
+* If the VS1053 module could not be initialized correctly (either not at all or only at slow SPI speed which is insufficient for the BT data stream) the BT-mode will be ignored and the Odroid will start in Radio-mode.
 
 The following will apply if the radio successfully started in Bluetooth mode:
 * The screen has four segments. The top line shows the word "Bluetooth" instead on the right (clock is dependend on WiFi hence not available in BT-Mode). The big second segment will show title info and spectrum analyzer (if enabled in [Menu 3](#menu-3-equalizerspectrum-analyzer)) and BT is playing. The third segment will show the current Bluetooth-connection status and the bottom line will show the current volume.
