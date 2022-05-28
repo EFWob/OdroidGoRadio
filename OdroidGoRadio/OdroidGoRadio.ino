@@ -5790,8 +5790,7 @@ void displayinfo ( uint16_t inx )
       dsp_setCursor ( x, p->y ) ;                          // Prepare to show the info
       dsp_println ( buf ) ;                                // Show the string
     }
-    if (!refreshOnly)
-      dbgprint("Print tftsec[%d]=\"%s\"", inx, buf);
+    //if (!refreshOnly) dbgprint("Print tftsec[%d]=\"%s\"", inx, buf);
   }
 
 #else
@@ -5895,8 +5894,17 @@ bool handle_tft_txt()
     if ( tftdata[i].update_req )                          // Refresh requested?
     {
       claimTFT("text");
+      if ( dsp_usesSPI() )                                        // Does display uses SPI?
+      {
+        claimSPI ( "hspectft" ) ;                                 // Yes, claim SPI bus
+      }
       displayinfo ( i ) ;                                 // Yes, do the refresh
       dsp_update() ;                                      // Updates to the screen
+      if ( dsp_usesSPI() )                                        // Does display uses SPI?
+      {
+        releaseSPI ( ) ;                                 // Yes, Release SPI bus
+      }
+
       tftdata[i].update_req = false ;                     // Reset request
       releaseTFT();
       return true ;                                       // Just handle 1 request
@@ -5967,18 +5975,10 @@ void playtask ( void * parameter )
 void handle_spec()
 {
   // Do some special function if necessary
-  if ( dsp_usesSPI() )                                        // Does display uses SPI?
-  {
-    claimSPI ( "hspectft" ) ;                                 // Yes, claim SPI bus
-  }
   if ( tft )                                                  // Need to update TFT?
   {
 
     handle_tft_txt();                                        // Yes, TFT refresh necessary
-  }
-  if ( dsp_usesSPI() )                                        // Does display uses SPI?
-  {
-    releaseSPI() ;                                            // Yes, release SPI bus
   }
   if ( time_req && NetworkFound )                             // Time to refresh time?
   {

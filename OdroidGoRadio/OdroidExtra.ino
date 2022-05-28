@@ -1681,10 +1681,10 @@ class RadioMenu2: public RadioMenu {
 
 class RadioMenu3: public RadioMenu {
   public:
-    RadioMenu3() : RadioMenu("Equalizer") {
-      addEntry(new RadioMenuEntry("--- Equalizer Settings ---"));
-      addEntry(new RadioMenuEntry("  ... to be done..."));
-      addEntry(new RadioMenuEntry("--- Spectrum Analyzer ----"));
+    RadioMenu3() : RadioMenu("Spectrum Analyzer") {
+      //addEntry(new RadioMenuEntry("--- Equalizer Settings ---"));
+      //addEntry(new RadioMenuEntry("  ... to be done..."));
+      //addEntry(new RadioMenuEntry("--- Spectrum Analyzer ----"));
       addEntry(_showSpectrum = new RadioMenuEntryBool("Show Spectrum Analyzer", &odroidRadioConfig.equalizer.showSpectrumAnalyzer));
       addEntry(_showSpeed = new RadioMenuEntrySpectrumSpeed("Analyzer Speed", &odroidRadioConfig.equalizer.spectrumAnalyzerSpeed));
       addEntry(_barWidth = new RadioMenuEntry("Bar width", &odroidRadioConfig.equalizer.spectrumAnalyzerWidth,0,20));
@@ -1974,6 +1974,14 @@ void handleBtnAB(uint8_t group, bool released = false) {
     radioStatemachine.resetStateTime();
 }
 
+
+void handleBtnABToggle(uint8_t group)
+{
+  if (RADIOSTATE_MENU == radioStatemachine.getState())
+    handleBtnAB(group, false);
+  else
+    radioStatemachine.resetStateTime();
+}
 
 
 String genreChannel(int id)
@@ -2431,8 +2439,11 @@ void odroidSetup() {
     if (nvsgetOdroid())
       dbgprint("Odroid config data from nvs done!");
     dbgprint( "Odroid-Setup done" ) ;
+    /*
+    claimSPI("setup");
     dsp_setRotation();
-    
+    releaseSPI();
+    */
 /*    if (odroidRadioConfig.misc.flipped)
       tft->setRotation(3);
     else
@@ -2488,12 +2499,15 @@ void odroidSetup() {
               .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
     }
     btnA.onLongPressed([](uint16_t) {handleBtnAB(0);}).onLongReleased([]() {handleBtnAB(0, true);})
-              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+              //.onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+              .onToggle([](bool x){if(x) handleBtnABToggle(0);});
     btnB.onLongPressed([](uint16_t) {handleBtnAB(1);}).onLongReleased([]() {handleBtnAB(1, true);})
-              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+              //.onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+              .onToggle([](bool x){if(x) handleBtnABToggle(1);});
 
     
     if (LOW == digitalRead(32)) {
+      claimSPI("setup");
       dsp_erase();
       dsp_setRotation();
       dsp_setTextSize(1);
@@ -2504,6 +2518,7 @@ void odroidSetup() {
       dsp_println("\nPress (A) again to start.");
       while (HIGH == digitalRead(32))
         delay(20);
+      releaseSPI();
     }  
   //audiomode = AUDIOMODE_RADIO;
 }
@@ -2789,6 +2804,7 @@ char s[30];
   a2dp_sink.set_avrc_metadata_callback(avrc_metadata_callback);
   a2dp_sink.set_on_audio_state_changed(audio_state_changed);
   a2dp_sink.set_on_connection_state_changed(connection_state_changed);
+  dbgprint("Start Bluetooth, Name=%s, autoConnect=%d", NAME, odroidRadioConfig.bluetooth.autoConnect);
   a2dp_sink.start(NAME, odroidRadioConfig.bluetooth.autoConnect);
   vs1053player->playChunk (pcm_header, sizeof(pcm_header));
   showRadiotext("");
@@ -2861,18 +2877,22 @@ bool dsp_begin()
 //  GO.lcd.begin();
 //  tft = &GO.lcd;
 //  GO.lcd.setBrightness(brightnessLevel);
+  claimSPI("setup");
   tft = new ILI9341();
   tft->begin();
   odroidSetup();
   dsp_setRotation();
+  releaseSPI();
   return ( tft != NULL ) ;
 }
 
+/*
 void dsp_upsideDown()
 {
   tft->setRotation (3);               // Needed if Odroid is used with docking station 
   displayFlipped = true;
 }
+*/
 
 
 //Implementation of class RadioStatemachine below
@@ -2934,10 +2954,14 @@ void dsp_upsideDown()
 
   void dsp_setRotation() {
       if (odroidRadioConfig.misc.flipped) {
+        //claimSPI("tftrotation");
         tft->setRotation(3);
+        //releaseSPI();
         dbgprint("DISPLAY Rotation3");
       } else {
+        //claimSPI("tftrotation");
         tft->setRotation(1);
+        //releaseSPI();
         dbgprint("DISPLAY Rotation1");
 
       }    
@@ -2967,10 +2991,15 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
       dbgprint("RadioState: %d (%s)", currentStatenb, radiostateNames[currentStatenb]);
       bool ignoreSpectrumAnalyzerSection = false;
       tftdata[TFTSEC_TXT].color = CYAN;
-      dsp_setRotation();
+      if (RADIOSTATE_MENU_DONE == currentStatenb)
+      {
+        claimSPI("MenuDone");
+        dsp_setRotation();
+        releaseSPI();
+      }
 //      if ((RADIOSTATE_PRESET_SET == currentStatenb) 
 //            || (RADIOSTATE_LIST_SET == currentStatenb))
-      if ((currentStatenb != RADIOSTATE_VOLUME) && (oldStatenb != RADIOSTATE_VOLUME))
+      if ((currentStatenb != RADIOSTATE_VOLUME) && (oldStatenb != RADIOSTATE_VOLUME) && (oldStatenb != RADIOSTATE_MENU_DONE))
         spectrumBlockTime = millis();
       if ((STATE_INIT_NONE == oldStatenb) && (0 == odroidRadioConfig.start.preset)){
         String str = nvsgetstr ( "preset" );
@@ -3054,21 +3083,23 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
     else if (RADIOSTATE_INICONFIG == currentStatenb) {
       analyzeCmd("stop");
       dsp_erase();
+      tftdata[TFTSEC_LIST_CLR].height += 32;
       tftdata[TFTSEC_MEN_TOP].color = TFT_RED;
       tftset(TFTSEC_MEN_TOP, "WiFi failure");
-      tftset(TFTSEC_LIST_CLR, "Connect desktop PC to SSID" NAME "/Pw " NAME "Open http://192.168.4.1/  to check your WiFi creden-tials.\n\n"
+      tftset(TFTSEC_LIST_CLR, "Connect desktop PC to SSID" NAME "/Pw " NAME " \nOpen http://192.168.4.1/  to check your WiFi creden-tials.\n\n"
                         "Press (Default) there to  "
-                        "load initial values.\n\n"
+                        "load initial values.\n \n"
                         "Press (Save) and (Restart)when done!");
     } else if (RADIOSTATE_INIVS == currentStatenb) {
       dsp_erase();
+      tftdata[TFTSEC_LIST_CLR].height += 32;
       tftdata[TFTSEC_MEN_TOP].color = TFT_RED;
       tftset(TFTSEC_MEN_TOP, "DAC VS1053 failure");
       tftset(TFTSEC_LIST_CLR, String("Check connection between  Odroid and VS1053 module.\n\n"
                         "Press (A) or (B) to start demomode anyways.\n\nFor more help, open\nhttp://") + ipaddress + String("/startup.html"));
     }
     if (--currentStatenb < NUM_RADIOSTATES) {
-      dbgprint("TESTESTESTEST bit[%d][20] = %d", currentStatenb, screenSections[currentStatenb] & bit(TFTSEC_BLUETOOTH));
+      //dbgprint("TESTESTESTEST bit[%d][20] = %d", currentStatenb, screenSections[currentStatenb] & bit(TFTSEC_BLUETOOTH));
       int i;
       uint32_t bm = 1;
       for(int i = 0;i < TFTSECS;i++) {
@@ -3666,7 +3697,7 @@ void runSpectrumAnalyzer() {
   if (!tftdata[TFTSEC_SPECTRUM].hidden)             // this is only true, if spectrum analyzer should be displayed
     if (spectrumBlockTime)
     {
-      if (millis() - spectrumBlockTime > 1500)
+      if (millis() - spectrumBlockTime > 500)
         spectrumBlockTime = 0;
     }
     else

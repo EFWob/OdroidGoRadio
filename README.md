@@ -3,6 +3,8 @@
 **20220528**
 You can now use your Odroid-Go-Radio as [Bluetooth stream player](#using-bluetooth). 
 
+Some bugfixes/changes/improvements...
+
 **2021**
 You can now play stations from genre lists (i. e. Pop, Rock, etc...) that are synchronized using a public radio database server (https://www.radio-browser.info/#/). 
 This database has more than 27,000 stations organised in different categories (by region or genre tags). With this addition, you can 
