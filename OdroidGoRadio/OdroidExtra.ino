@@ -13,6 +13,7 @@
 size_t spectrumAnalyzerPluginSize = 1000;
 extern const uint16_t spectrumAnalyzerPlugin[1000];
 BluetoothA2DPSink a2dp_sink;
+bool odroidResetReq = false;
 
 ILI9341 *tft = NULL;
 
@@ -159,6 +160,8 @@ class SpectrumAnalyzer {
      void showSegmentColor(int16_t col) {_showSegmentColor = col;dbgprint("Set SegmentColor %d", _showSegmentColor);};
      void showText(bool showText) {_showText = showText;};
      bool showText() {return _showText;};
+     void txtRefreshDisabled(bool disable) {_txtRefreshDisabled = disable;};
+     bool txtRefresh() {return _txtRefreshDisabled;}; 
      int16_t getBarColor() {return getColor(_showColor);};
      void fastDrop(bool fast) {_fastDrop = fast;}; 
    protected:
@@ -183,6 +186,7 @@ class SpectrumAnalyzer {
     uint8_t _drawn = 0;
     uint32_t _readTime = 0;
     uint32_t _lastRun = 0;
+    bool _txtRefreshDisabled = false;
     uint8_t _spectrum[14][4];
     bool _dynamicBrightness = false;
 
@@ -430,7 +434,7 @@ class BottomLineStatemachine: public BasicStatemachine {
 #define MENU_SHOWTIME             (1000ul * (uint32_t)odroidRadioConfig.showtime.menu)
 #define LIST_SHOWTIME             (1000ul * (uint32_t)odroidRadioConfig.showtime.chanList)
 #define BRIGHTNESS_SHOWTIME       (1000ul * (uint32_t)odroidRadioConfig.showtime.brightness)
-#define BRIGHTNESS_RUNUPTIME      (50ul * (uint32_t)odroidRadioConfig.showtime.brightnessUp)
+#define BRIGHTNESS_RUNUPTIME      ((uint32_t)odroidRadioConfig.showtime.brightnessUp)
 #define FAVORITE_GROUPS           2       // 2 Groups, linked to Buttons (A) (B)
 #define FAVORITE_BANKS            (odroidRadioConfig.misc.favBanks)       // with 3 Banks (of 4 Favorites each) 
 #define KEY_SPEED                 (5 - odroidRadioConfig.misc.keySpeed * 2)
@@ -585,7 +589,7 @@ struct {
     int16_t chanList = 15;
     int16_t menu = 15;
     int16_t brightness = 4;
-    int16_t brightnessUp = 5; 
+    int16_t brightnessUp = 250; 
   } showtime;
 
   struct {
@@ -610,18 +614,18 @@ struct {
     int16_t preset = 1;
   } start;
   struct {
-    int16_t showSpectrumAnalyzer = 0;
-    int16_t spectrumAnalyzerSpeed = 3;
-    int16_t spectrumAnalyzerDynamic = 0;
+    int16_t showSpectrumAnalyzer = 1;
+    int16_t spectrumAnalyzerSpeed = 2;
+    int16_t spectrumAnalyzerDynamic = 1;
     int16_t spectrumAnalyzerPeaks = 1;
     int16_t spectrumAnalyzerSegmentWidth = -1;
-    int16_t spectrumAnalyzerWidth = 3;
-    int16_t spectrumAnalyzerText = 0;
+    int16_t spectrumAnalyzerWidth = 20;
+    int16_t spectrumAnalyzerText = 1;
     int16_t spectrumAnalyzerPeakWidth = -1;
     int16_t spectrumAnalyzerSegmentColor = 0;
     int16_t spectrumAnalyzerBarColor = 5;  
-    int16_t spectrumAnalyzerFastDrop = 1;
-    int16_t eq0 = 0;
+    int16_t spectrumAnalyzerFastDrop = 0;
+    int16_t spectrumAnalyzerTxtRefreshDisabled = 0; // was (unused) "eq0 = 0;" before
     int16_t eq1 = 0;
     int16_t eq2 = 0;
     int16_t eq3 = 0;
@@ -662,8 +666,8 @@ VirtualPinAnalog2Digital xRight(&playX, 4000, 4095);
 VirtualPinAnalog2Digital yUp(&playY, 1700, 1900);
 VirtualPinAnalog2Digital yDown(&playY, 4000, 4095);
 
-ButtonHandler volUp(&xRight, NULL, 50, 30);
-ButtonHandler volDn(&xLeft, NULL, 50, 30);
+ButtonHandler volUp(&xRight, NULL, 50, 100);
+ButtonHandler volDn(&xLeft, NULL, 50, 100);
 ButtonHandler prevChannel(&yUp, NULL, 50, 100);
 ButtonHandler nextChannel(&yDown, NULL, 50, 100);
 
@@ -706,8 +710,8 @@ class RadioMenu;
 
 class RadioMenuEntry {
   public:
-    RadioMenuEntry(char* txt, int16_t *reference, int16_t min, int16_t max):
-          _prev(NULL), _next(NULL), _reference(reference), _txt(txt), _minVal(min), _maxVal(max) {
+    RadioMenuEntry(char* txt, int16_t *reference, int16_t min, int16_t max, int step = 1):
+          _prev(NULL), _next(NULL), _reference(reference), _txt(txt), _minVal(min), _maxVal(max), _step(step) {
       if (txt)
         _txt = strdup(txt);
       read();  
@@ -760,14 +764,14 @@ class RadioMenuEntry {
     virtual int16_t delta(uint16_t repeats) {
         if (repeats < 20) {
           if ((repeats % 5) == 0)
-            return 1;
+            return _step;
           else
             return 0;
         };
         if (repeats < 40)
-          return 1;
+          return _step;
         else
-          return 1 + (_maxVal - _minVal) / 50;
+          return _step + _step * ((_maxVal - _minVal) / 50);
     };
     
     virtual bool up(uint16_t repeats) {
@@ -859,7 +863,7 @@ class RadioMenuEntry {
     RadioMenuEntry *_next;
     int16_t *_reference;
     int16_t _value;
-    int16_t _minVal, _maxVal;
+    int16_t _minVal, _maxVal, _step;
     char *_txt;
 
     friend class RadioMenu;
@@ -1391,9 +1395,9 @@ class RadioMenu1: public RadioMenu {
 
       addEntry(new RadioMenuEntry("--- Brightness Settings --"));
       addEntry(_maxBri = new RadioMenuEntry("Brightness normal", &odroidRadioConfig.backlight.max, 1, 255));
-      addEntry(new RadioMenuEntry("Brightness down time", &odroidRadioConfig.showtime.brightness, 0, 120));
       addEntry(_minBri = new RadioMenuEntry("Brightness dimmed", &odroidRadioConfig.backlight.min, 0, 255));
-      addEntry(new RadioMenuEntryBriUp("Brightness up time", &odroidRadioConfig.showtime.brightnessUp, 10));
+      addEntry(new RadioMenuEntry("Brightn run-down (s)", &odroidRadioConfig.showtime.brightness, 0, 120));
+      addEntry(new RadioMenuEntry("Brightn run-up (ms)", &odroidRadioConfig.showtime.brightnessUp, 0, 500, 50));
 
       addEntry(new RadioMenuEntry("--- Timeout Settings -----"));
       addEntry(new RadioMenuEntry("Timeout Volume popup", &odroidRadioConfig.showtime.volume,0, 60));
@@ -1410,7 +1414,7 @@ class RadioMenu1: public RadioMenu {
       addEntry(_flip = new RadioMenuEntryBool("Display Flipped", &odroidRadioConfig.misc.flipped));
       addEntry(new RadioMenuEntry("--- Bluetooth ------------"));
       addEntry(new RadioMenuEntryAudioMode("Audio at start", &odroidRadioConfig.bluetooth.audioMode));
-      addEntry(new RadioMenuEntryBool("Connect last source", &odroidRadioConfig.bluetooth.autoConnect));
+      addEntry(new RadioMenuEntryBool("Connect last BT-source", &odroidRadioConfig.bluetooth.autoConnect));
       addEntry(new RadioMenuEntry("BT volume", &odroidRadioConfig.bluetooth.volume, 0, 100));
       //addEntry(new RadioMenyEntry("Reset on VolMaxMin", &odroidRadioConfig.bluetooth.volumeReset, 0, 10));
       addEntry(new RadioMenuEntry("Reset on Vol-Max/Min", &odroidRadioConfig.bluetooth.volumeReset, 0, 10));
@@ -1692,6 +1696,7 @@ class RadioMenu3: public RadioMenu {
       addEntry(_showSegments = new RadioMenuEntryWidth("Segm.Divider width", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentWidth));
       addEntry(_segmentColor = new RadioMenuEntrySpectrumColor("Segm.Divider color", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentColor));
       addEntry(_showText = new RadioMenuEntryBool("Show Radiotext", &odroidRadioConfig.equalizer.spectrumAnalyzerText));
+      addEntry(_txtRefreshDisabled = new RadioMenuEntryBool("Disable Text refresh", &odroidRadioConfig.equalizer.spectrumAnalyzerTxtRefreshDisabled));
     };
 
     void menuButton(uint8_t button, uint16_t repeats) {
@@ -1706,6 +1711,7 @@ class RadioMenu3: public RadioMenu {
       int16_t segmentColor = _segmentColor->value();
       int16_t barColor = _showColor->value();
       int16_t fastDrop = _fastDrop->value();
+      int16_t txtRefreshDisabled = _txtRefreshDisabled->value();
       RadioMenu::menuButton(button, repeats);
       dbgprint("MenuButton done. Value BarColor: %d (was: %d)", _showColor->value(), barColor);
       if (barColor != _showColor->value())
@@ -1730,16 +1736,18 @@ class RadioMenu3: public RadioMenu {
         spectrumAnalyzer.showSegmentColor(_segmentColor->value());
       else if (fastDrop != _fastDrop->value())
         spectrumAnalyzer.fastDrop(_fastDrop->value());
-
+      else if (txtRefreshDisabled != _txtRefreshDisabled->value())
+        spectrumAnalyzer.txtRefreshDisabled(_txtRefreshDisabled->value());
     };
     protected:
       RadioMenuEntryBool* _showSpectrum;
       RadioMenuEntryBool* _showDynamic;
       RadioMenuEntryBool* _fastDrop;
+      RadioMenuEntryBool*_txtRefreshDisabled;
       RadioMenuEntrySpectrumColor* _showPeaks;
       RadioMenuEntrySpectrumColor* _showColor;
       RadioMenuEntrySpectrumColor* _segmentColor;
-      RadioMenuEntry* _barWidth;
+      RadioMenuEntry* _barWidth; 
       RadioMenuEntryWidth* _showSegments;
       RadioMenuEntrySpectrumSpeed* _showSpeed;
       RadioMenuEntryBool* _showText;
@@ -1879,7 +1887,7 @@ void handleBtnAB(uint8_t group, bool released = false) {
       radioStatemachine.setState(RADIOSTATE_RUN);
     return; 
   }
-  radioStatemachine.resetStateTime();
+  //radioStatemachine.resetStateTime();
   if ((RADIOSTATE_MENU == radioState) || (RADIOSTATE_MENU_DONE == radioState)) {
     if (RADIOSTATE_MENU == radioState)
       radioStatemachine.menuButton(group?MENU_B:MENU_A,0);
@@ -2021,7 +2029,7 @@ String genreChannel(int id)
 void handleBtnMemory(int id) {
 int radioState = radioStatemachine.getState();
 String str;
-    radioStatemachine.resetStateTime();
+    //radioStatemachine.resetStateTime();
     if (AUDIOMODE_RADIO != audiomode)
       return;
     if (!odroidRadioConfig.misc.flipped)
@@ -2045,7 +2053,8 @@ String str;
           id = id - 1 + 4 * favoriteGroup;
           str = readStationfrompref(id); 
           if (newPreset = (id != ini_block.newpreset)) {
-            tftset(TFTSEC_TXT, str);
+            showRadiotext(str);
+            //tftset(TFTSEC_TXT, str);
             tftset(TFTSEC_BOT, str);
             sprintf(s, "%d", id);
             analyzeCmd("preset", s); 
@@ -2092,7 +2101,7 @@ int channelY;
     return channelX;
   if (!odroidRadioConfig.misc.flipped)
     direction = -direction;
-  radioStatemachine.resetStateTime();  
+  //radioStatemachine.resetStateTime();  
   if (RADIOSTATE_MENU == radioState) {
     radioStatemachine.menuButton((1 == direction)?MENU_DN:MENU_UP, repeats);
   }
@@ -2183,11 +2192,11 @@ void checkReset(uint32_t currentTime) {
     {
       dbgprint("Reset!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
       if (AUDIOMODE_BLUETOOTH == audiomode)
-        nvssetstr("resetflag", "radio");
+        nvssetstr("rstflag", "radio");
       else
-        nvssetstr("resetflag", "bluetooth");
+        nvssetstr("rstflag", "bluetooth");
+      odroidResetReq = true;
       resetTime = 0;
-      resetreq = true;
     }
     //else dbgprint("Delta: %d, max: %d", currentTime - resetTime, maxDelta);
   }
@@ -2212,6 +2221,7 @@ int16_t radioState = radioStatemachine.getState();
     if (RADIOSTATE_MENU == radioState) {
       radioStatemachine.menuButton((1 == dir)?MENU_RIGHT:MENU_LEFT, repeats);
     } 
+    /*
     else if (AUDIOMODE_BLUETOOTH == audiomode)
     {
       char s[30];
@@ -2236,6 +2246,7 @@ int16_t radioState = radioStatemachine.getState();
       tftset(TFTSEC_FAV_BOT, s);
       radioStatemachine.resetStateTime();
     }
+    */
     else if ((radioState == RADIOSTATE_VOLUME) || (radioState == RADIOSTATE_RUN) || (RADIOSTATE_PRESETS == radioState) || (RADIOSTATE_PRESET_SET == radioState)) {
       char s[30];
       if (RADIOSTATE_VOLUME == radioState)
@@ -2259,11 +2270,14 @@ int16_t radioState = radioStatemachine.getState();
         else
           analyzeCmd("downvolume", "1");
       }
-      sprintf(s, "\n       VOLUME: %3d", ini_block.reqvol);
-      tftset(TFTSEC_VOL, s);
+      sprintf(s, "VOLUME: %3d", ini_block.reqvol);
+      if (AUDIOMODE_RADIO == audiomode)
+        tftset(TFTSEC_VOL, (String("\n       ") + String(s)).c_str());      
+      else
+        tftset(TFTSEC_FAV_BOT, s);
       return;
     } else if ((RADIOSTATE_LIST == radioState) || (RADIOSTATE_GENRE == radioState)) {
-        radioStatemachine.resetStateTime();
+        //radioStatemachine.resetStateTime();
         if (1 == dir) 
         {
           if (RADIOSTATE_LIST == radioState)
@@ -2370,6 +2384,7 @@ bool nvsgetOdroid ()
         if (ESP_OK == nvserr)
         {
           memcpy(&odroidRadioConfig, &odroidRadioConfigOld, len);
+          odroidRadioConfig.showtime.brightnessUp *= 50;
         }
       }
       else if (0 == strcmp(versionStr, "20220519"))
@@ -2381,6 +2396,7 @@ bool nvsgetOdroid ()
         if (ESP_OK == nvserr)
         {
           memcpy(&odroidRadioConfig, &odroidRadioConfigOld, len);
+          odroidRadioConfig.showtime.brightnessUp *= 50;
         }
       }
       else if (ESP_OK == nvserr) 
@@ -2408,17 +2424,6 @@ void odroidSetup() {
     ledcSetup(0, 5000, 8);
     ledcAttachPin(14, 0);
     ledcWrite(0, 255);
-    volUp.onLongPressed([](uint16_t repeats) {handleBtnX(1, false, repeats);}).onLongReleased([]() {handleBtnX(1, true);});
-    volDn.onLongPressed([](uint16_t repeats) {handleBtnX(-1, false, repeats);}).onLongReleased([]() {handleBtnX(-1, true);});
-    prevChannel.onLongPressed([](uint16_t repeats) {handleBtnY(-1, repeats);});
-    nextChannel.onLongPressed([](uint16_t repeats) {handleBtnY(1, repeats);});
-
-    btnStart.onPressed([]() {handleBtnMemory(1);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(1);});
-    btnSelect.onPressed([](){handleBtnMemory(2);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(2);});
-    btnVol.onPressed([]() {handleBtnMemory(3);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(3);});
-    btnMenu.onPressed([]() {handleBtnMemory(4);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(4);});
-    btnA.onLongPressed([](uint16_t) {handleBtnAB(0);}).onLongReleased([]() {handleBtnAB(0, true);});
-    btnB.onLongPressed([](uint16_t) {handleBtnAB(1);}).onLongReleased([]() {handleBtnAB(1, true);});
     for(int i = 0;i < 100;i++) {
       sprintf(key, "preset_%02d", i);
       presetPresent[i] = nvssearch(key);
@@ -2433,12 +2438,15 @@ void odroidSetup() {
     else
       tft->setRotation(1);
 */
-    String rstflag = nvsgetstr("resetflag");
-    if ((rstflag == "radio") || (rstflag == "bluetooth"))
+    String rstflag = nvsgetstr("rstflag");
+    if (rstflag.length() > 0)
     {
+      nvsdelkey("rstflag");
+      if ((rstflag == "radio") || (rstflag == "bluetooth"))
+      {
         dbgprint("Reset flag found!x=%s", rstflag.c_str());
-        nvsdelkey("resetflag");
-        audiomode=rstflag.c_str()[0] == 'r'?AUDIOMODE_RADIO:AUDIOMODE_BLUETOOTH;
+        audiomode=((rstflag.c_str()[0] == 'r')?AUDIOMODE_RADIO:AUDIOMODE_BLUETOOTH);
+      }
     }
     if (AUDIOMODE_UNKNOWN == audiomode)
     {
@@ -2451,6 +2459,40 @@ void odroidSetup() {
           audiomode = AUDIOMODE_RADIO;
       }
     }
+
+    volUp.onLongPressed([](uint16_t repeats) {handleBtnX(1, false, repeats);}).onLongReleased([]() {handleBtnX(1, true);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+    volDn.onLongPressed([](uint16_t repeats) {handleBtnX(-1, false, repeats);}).onLongReleased([]() {handleBtnX(-1, true);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+    prevChannel.onLongPressed([](uint16_t repeats) {handleBtnY(-1, repeats);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+    nextChannel.onLongPressed([](uint16_t repeats) {handleBtnY(1, repeats);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+
+    if (AUDIOMODE_BLUETOOTH == audiomode)
+    {
+      btnStart.onToggle([](bool x){if(x) radioStatemachine.startMenu(1);});      
+      btnSelect.onToggle([](bool x){if(x) radioStatemachine.startMenu(2);});      
+      btnVol.onToggle([](bool x){if(x) radioStatemachine.startMenu(3);});      
+      btnMenu.onToggle([](bool x){if(x) radioStatemachine.startMenu(4);});      
+    }
+    else
+    {
+      btnStart.onPressed([]() {handleBtnMemory(1);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(1);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+      btnSelect.onPressed([](){handleBtnMemory(2);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(2);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+      btnVol.onPressed([]() {handleBtnMemory(3);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(3);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+      btnMenu.onPressed([]() {handleBtnMemory(4);}).onLongPressed([](uint16_t) {radioStatemachine.startMenu(4);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+    }
+    btnA.onLongPressed([](uint16_t) {handleBtnAB(0);}).onLongReleased([]() {handleBtnAB(0, true);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+    btnB.onLongPressed([](uint16_t) {handleBtnAB(1);}).onLongReleased([]() {handleBtnAB(1, true);})
+              .onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
+
+    
     if (LOW == digitalRead(32)) {
       dsp_erase();
       dsp_setRotation();
@@ -2513,7 +2555,8 @@ int16_t iniVolume;
           //tftset(TFTSEC_FAV_STAT, s);
           bottomLineStatemachine.setState(BOTTOMLINE_NORMAL);
           String str = readStationfrompref(preset);
-          tftset(TFTSEC_TXT, str);
+          showRadiotext(str);
+          //tftset(TFTSEC_TXT, str);
           tftset(TFTSEC_BOT, str);
       }     
 //      radioStateMachine._menu[2] = new RadioMenu3;
@@ -2537,6 +2580,7 @@ int16_t iniVolume;
     spectrumAnalyzer.showSegmentColor(odroidRadioConfig.equalizer.spectrumAnalyzerSegmentColor);
     spectrumAnalyzer.showWidth(odroidRadioConfig.equalizer.spectrumAnalyzerWidth);
     spectrumAnalyzer.showText(odroidRadioConfig.equalizer.spectrumAnalyzerText);
+    spectrumAnalyzer.txtRefreshDisabled(odroidRadioConfig.equalizer.spectrumAnalyzerTxtRefreshDisabled);
     spectrumAnalyzer.showPeakWidth(odroidRadioConfig.equalizer.spectrumAnalyzerPeakWidth);
     spectrumAnalyzer.showBarColor(odroidRadioConfig.equalizer.spectrumAnalyzerBarColor);
     spectrumAnalyzer.fastDrop(odroidRadioConfig.equalizer.spectrumAnalyzerFastDrop);
@@ -2641,6 +2685,28 @@ void *p;
 }
 
 
+void showRadiotext(String text, uint32_t timeout)
+{
+static uint32_t lastShow = 0;
+  if (0 == timeout)
+  {
+      tftset(TFTSEC_TXT, text);    
+      lastShow = millis();
+  }
+  else if (!tftdata[TFTSEC_TXT].hidden)
+    if (0 != timeout)
+      if (millis() - lastShow > timeout)
+        {
+          tftdata[TFTSEC_TXT].update_req = true;
+          lastShow = millis();
+        }
+}
+
+void showRadiotext(String text)
+{
+  showRadiotext(text, 0);
+}
+
 void showBtText()  
 {
 String left;
@@ -2664,7 +2730,7 @@ String left;
       left = left + "\n" + right;
     }
   }
-  tftset(TFTSEC_TXT, left);    
+  showRadiotext(left);
 }
 
 
@@ -2701,6 +2767,7 @@ void audio_state_changed(esp_a2d_audio_state_t state, void *ptr){
 void connection_state_changed(esp_a2d_connection_state_t state, void *ptr){
   dbgprint("ConnectionState: %d (%s)", state, a2dp_sink.to_str(state));
   tftset(TFTSEC_BOT, String("Bluetooth ") + a2dp_sink.to_str(state));
+  radioStatemachine.resetStateTime();
 }
 
 void setupBluetooth()
@@ -2724,7 +2791,7 @@ char s[30];
   a2dp_sink.set_on_connection_state_changed(connection_state_changed);
   a2dp_sink.start(NAME, odroidRadioConfig.bluetooth.autoConnect);
   vs1053player->playChunk (pcm_header, sizeof(pcm_header));
-  tftset(TFTSEC_TXT, "");
+  showRadiotext("");
   tftset(TFTSEC_BOT, String("Bluetooth ") + a2dp_sink.to_str(a2dp_sink.get_connection_state()));
 
 }
@@ -2750,11 +2817,19 @@ void odroidSetup2(void)
 void odroidLoop(void) {    
 static bool first = true;
   yield();
+  if (odroidResetReq)
+    resetreq = true;
   if (first) {
     dbgprint("\n\nRunning First Loop Setup\n\n");
     first = odroidRadioFirstLoopSetup();
     dbgprint("First loop setup done!");
-  } else {
+  } else if (resetreq) {
+    dsp_erase();
+    dsp_setCursor(10, 8);
+    dsp_setTextColor(WHITE);
+    dsp_println("Radio going to RESET!");
+    dbgprint("Radio going to RESET!");
+  } else { 
     genreLoop();
     StatemachineLooper.run();
     claimSPI("spectrum");
@@ -2893,8 +2968,9 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
       bool ignoreSpectrumAnalyzerSection = false;
       tftdata[TFTSEC_TXT].color = CYAN;
       dsp_setRotation();
-      if ((RADIOSTATE_PRESET_SET == currentStatenb) 
-            || (RADIOSTATE_LIST_SET == currentStatenb))
+//      if ((RADIOSTATE_PRESET_SET == currentStatenb) 
+//            || (RADIOSTATE_LIST_SET == currentStatenb))
+      if ((currentStatenb != RADIOSTATE_VOLUME) && (oldStatenb != RADIOSTATE_VOLUME))
         spectrumBlockTime = millis();
       if ((STATE_INIT_NONE == oldStatenb) && (0 == odroidRadioConfig.start.preset)){
         String str = nvsgetstr ( "preset" );
@@ -2902,7 +2978,8 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
         dbgprint("Start with last preset: %s\n", str.c_str());
 
         str = readStationfrompref(str.toInt());
-        tftset(TFTSEC_TXT, str);
+        showRadiotext(str);
+        //tftset(TFTSEC_TXT, str);
         tftset(TFTSEC_BOT, str);
       }
     if (STATE_INIT_NONE == currentStatenb)
@@ -2955,9 +3032,12 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
 */
         }
       }
-      if (AUDIOMODE_BLUETOOTH == audiomode)
+      if ((AUDIOMODE_BLUETOOTH == audiomode) && ((RADIOSTATE_RUN == currentStatenb) || ((RADIOSTATE_VOLUME == currentStatenb))))
       {
-        screenSections[currentStatenb - 1] = screenSections[currentStatenb - 1] | bit(TFTSEC_BLUETOOTH);
+        //screenSections[currentStatenb - 1] = screenSections[currentStatenb - 1] | bit(TFTSEC_BLUETOOTH);
+        screenSections[currentStatenb - 1] = bit(TFTSEC_TOP)|bit(TFTSEC_TXT)|bit(TFTSEC_BOT)|bit(TFTSEC_FAV_BOT)|bit(TFTSEC_BLUETOOTH);
+        if (spectrumAnalyzer.isActive())
+          screenSections[currentStatenb - 1] |= bit(TFTSEC_SPECTRUM);
       }      
     } 
     else if (RADIOSTATE_LIST == currentStatenb)
@@ -2976,8 +3056,9 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
       dsp_erase();
       tftdata[TFTSEC_MEN_TOP].color = TFT_RED;
       tftset(TFTSEC_MEN_TOP, "WiFi failure");
-      tftset(TFTSEC_LIST_CLR, "Connect desktop PC to SSID" NAME "/Pw " NAME "Open http://192.198.4.1/  to check your WiFi creden-tials.\n\n"
-                        "Press (Default) to load   initial values.\n\n"
+      tftset(TFTSEC_LIST_CLR, "Connect desktop PC to SSID" NAME "/Pw " NAME "Open http://192.168.4.1/  to check your WiFi creden-tials.\n\n"
+                        "Press (Default) there to  "
+                        "load initial values.\n\n"
                         "Press (Save) and (Restart)when done!");
     } else if (RADIOSTATE_INIVS == currentStatenb) {
       dsp_erase();
@@ -3028,7 +3109,7 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
   uint32_t runTime = getStateTime();
     if (STATE_INIT_NONE == stateNb)
       return;
-    if (RADIOSTATE_INICONFIG == stateNb)
+    if ((RADIOSTATE_INICONFIG == stateNb) || (RADIOSTATE_INIVS == stateNb))
       brightness=255;
     else if (stateNb != RADIOSTATE_RUN) {
         if ((runTime >= BRIGHTNESS_RUNUPTIME) || (_currentMenu &&(brightness == odroidRadioConfig.backlight.max))) 
@@ -3505,7 +3586,13 @@ void SpectrumAnalyzer::run1() {
       _lastRun = millis();
     //hack
       if (_showText)
+      {
         tftdata[TFTSEC_TXT].hidden = false;
+        if (!_txtRefreshDisabled)
+          if (tftdata[1].str.length())
+            if (RADIOSTATE_VOLUME != radioStatemachine.getState())
+              showRadiotext("", 500);
+      }
     for(uint8_t toDraw = 0;toDraw < 14;toDraw++) {
       uint16_t w = _barWidth;
       uint16_t x = 20 + (10 - w/2) + 20 * toDraw;
@@ -3583,7 +3670,9 @@ void runSpectrumAnalyzer() {
         spectrumBlockTime = 0;
     }
     else
-      if (!(spectrumAnalyzer.showText()?tftdata[TFTSEC_TXT].update_req:tftdata[TFTSEC_SPECTRUM].update_req)){      
+      if ((!(spectrumAnalyzer.showText()?tftdata[TFTSEC_TXT].update_req:tftdata[TFTSEC_SPECTRUM].update_req))
+         //&& (RADIOSTATE_VOLUME != radioStatemachine.getState())
+         ){      
       // and this only after the display area has been cleared (and thus deleted the previous overlaying content)
         spectrumAnalyzer.run1();  
     }

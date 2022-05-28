@@ -52,9 +52,10 @@ struct scrseg_struct                                  // For screen segments
   uint16_t y ;                                        // Begin of segment row
   uint16_t height ;                                   // Height of segment
   String   str ;                                      // String to be displayed
-#if defined(ARDUINO_ODROID_ESP32)
+  #if defined(ARDUINO_ODROID_ESP32)
   bool     hidden;                                    // if set, update_req will not be set. 
   uint16_t x;                                         // x coordinate. Will be 0 normally
+  String oldStr ;                                     // remember last String shown  
 #endif
 } ;
 

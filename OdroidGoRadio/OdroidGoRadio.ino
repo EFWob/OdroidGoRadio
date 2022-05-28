@@ -2198,7 +2198,8 @@ void showstreamtitle ( const char *ml, bool full )
     }
     strcpy ( p1, p2 ) ;                         // Shift 2nd part of title 2 or 3 places
   }
-  tftset ( 1, streamtitle ) ;                   // Set screen segment text middle part
+  showRadiotext(streamtitle);
+  //tftset ( 1, streamtitle ) ;                   // Set screen segment text middle part
 }
 
 
@@ -2253,7 +2254,8 @@ bool connecttohost()
   dbgprint ( "Connect to new host %s", host.c_str() ) ;
 #if !defined(ARDUINO_ODROID_ESP32)
   tftset ( 0, "ESP32-Radio" ) ;                     // Set screen segment text top line
-  tftset ( 1, "" ) ;                                // Clear song and artist
+  showRadiotext("");
+  //tftset ( 1, "" ) ;                                // Clear song and artist
   displaytime ( "" ) ;                              // Clear time on TFT screen
 #endif
   setdatamode ( INIT ) ;                            // Start default in metamode
@@ -2383,6 +2385,7 @@ bool connectwifi()
     dbgprint ( "WiFi Failed!  Trying to setup AP with name %s and password %s.", NAME, NAME ) ;
     WiFi.softAP ( NAME, NAME ) ;                        // This ESP will be an AP
     pfs = dbgprint ( "IP = 192.168.4.1" ) ;             // Address for AP
+    cmdserver.begin();
   }
   else
   {
@@ -5580,6 +5583,10 @@ extern int genreId;
   else if ( argument.startsWith ( "reset" ) )         // Reset request
   {
     resetreq = true ;                                 // Reset all
+    if ( value.length()  > 0)
+      nvssetstr ( "rstflag", value ) ;
+    else
+      nvsdelkey ( "rstflag" );
   }
   else if ( argument.startsWith ( "update" ) )        // Update request
   {
@@ -5752,12 +5759,24 @@ void displayinfo ( uint16_t inx )
   if ( inx == 0 )                                          // Topline is shorter
   {
     width += TIMEPOS ;                                     // Leave space for time
+    if (AUDIOMODE_BLUETOOTH == audiomode)
+      width = width - 4;
   }
   if ( tft )                                               // TFT active?
   {
-    dsp_fillRect ( x, p->y, width - x, p->height, BLACK ) ;    // Clear the space for new info
+    bool refreshOnly = (inx == 1) && (p->oldStr == p->str);
+    if (!refreshOnly)
+      dsp_fillRect ( x, p->y, width - x, p->height, BLACK ) ;    // Clear the space for new info
+    if ((1 == inx) && !refreshOnly)
+      p->oldStr = p->str;
     if ( ( dsp_getheight() > 64 ) && ( p->y > 1 ) && (0 == x) )        // Need and space for divider?
     {
+      /*
+      if (refreshOnly && (p->y > 16))
+      {
+        dsp_fillRect ( x, p->y - 8, width, 8, BLACK ) ;      // Yes, show divider above text
+      }
+      */
       dsp_fillRect ( x, p->y - 4, width, 1, GREEN ) ;      // Yes, show divider above text
     }
     len = p->str.length() ;                                // Required length of buffer
@@ -5771,7 +5790,8 @@ void displayinfo ( uint16_t inx )
       dsp_setCursor ( x, p->y ) ;                          // Prepare to show the info
       dsp_println ( buf ) ;                                // Show the string
     }
-    dbgprint("Print tftsec[%d]=\"%s\"", inx, buf);
+    if (!refreshOnly)
+      dbgprint("Print tftsec[%d]=\"%s\"", inx, buf);
   }
 
 #else
@@ -5860,18 +5880,25 @@ void gettime()
 //**************************************************************************************************
 bool handle_tft_txt()
 {
+  if (resetreq)
+    return false;
   for ( uint16_t i = 0 ; i < TFTSECS ; i++ )              // Handle all sections
   {
 #if defined(ARDUINO_ODROID_ESP32)
-   if ( !tftdata[i].hidden)
+   if ( tftdata[i].hidden)
+   {
+      if (TFTSEC_TXT == i)
+        tftdata[i].oldStr = String('\t');
+   }
+   else
 #endif    
     if ( tftdata[i].update_req )                          // Refresh requested?
     {
       claimTFT("text");
       displayinfo ( i ) ;                                 // Yes, do the refresh
       dsp_update() ;                                      // Updates to the screen
-      releaseTFT();
       tftdata[i].update_req = false ;                     // Reset request
+      releaseTFT();
       return true ;                                       // Just handle 1 request
     }
   }
@@ -5947,13 +5974,7 @@ void handle_spec()
   if ( tft )                                                  // Need to update TFT?
   {
 
-#if !defined(ARDUINO_ODROID_ESP32)
     handle_tft_txt();                                        // Yes, TFT refresh necessary
-#else
-extern void runSpectrumAnalyzer();
-    if (!handle_tft_txt());
-      //runSpectrumAnalyzer();
-#endif
   }
   if ( dsp_usesSPI() )                                        // Does display uses SPI?
   {
