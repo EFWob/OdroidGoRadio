@@ -5,22 +5,23 @@ const char config_html[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <html>
  <head>
-  <title>Configuration ESP32-radio</title>
+  <title>Configuration ODROID-GO-radio</title>
   <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
   <link rel="stylesheet" type="text/css" href="radio.css">
   <link rel="Shortcut Icon" type="image/ico" href="favicon.ico">
  </head>
  <body>
   <ul>
-   <li><a class="pull-left" href="#">ESP32 Radio</a></li>
+   <li><a class="pull-left" href="#">ODROID-GO-Radio</a></li>
    <li><a class="pull-left" href="/index.html">Control</a></li>
+   <li><a class="pull-left" href="/genre.html">Genre</a></li>
    <li><a class="pull-left active" href="/config.html">Config</a></li>
-   <li><a class="pull-left" href="/mp3play.html">MP3 player</a></li>
+   <!-- <li><a class="pull-left" href="/mp3play.html">MP3 player</a></li> -->
    <li><a class="pull-left" href="/about.html">About</a></li>
   </ul>
   <br><br><br>
   <center>
-   <h1>** ESP32 Radio **</h1>
+   <h1>** ODROID-GO-Radio **</h1>
    <p>You can edit the configuration here. <i>Note that this will be effective on the next restart of the radio.</i>
    </p>
    <h3>Available WiFi networks

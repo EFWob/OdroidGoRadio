@@ -1,4 +1,4 @@
-#include "OdroidExtra.h"
+//#include "OdroidExtra.h"
 #include "genres.h"
 #include <SD.h>
 
@@ -8,7 +8,7 @@
 
 // If SD card used, claim SPI to avoid conflicting access to SPI
 inline void claim_spi_genre(bool isSD) {if (isSD) claimSPI("genres");}            
-inline void release_spi_genre(bool isSD) {if (isSD) claimSPI("false");}          
+inline void release_spi_genre(bool isSD) {if (isSD) releaseSPI();}          
 
 Genres genres("/_____gen.res/genres");
 
@@ -117,7 +117,7 @@ void Genres::dbgprint ( const char* format, ... ) {
 #if !defined(NOSERIAL)
     if (config.verbose())
     {
-        static char sbuf[2 * DEBUG_BUFFER_SIZE] ;                // For debug lines
+        char sbuf[500] ;                                     // For debug lines
         va_list varArgs ;                                    // For variable number of params
         sbuf[0] = 0 ;
         va_start ( varArgs, format ) ;                       // Prepare parameters
@@ -496,16 +496,19 @@ bool ret = false;
             }
 
         sprintf(path, "%d/idx", id);
-        const char* s = fileName(path).c_str();
+        String fnameStr = fileName(path);
+        const char* s = fnameStr.c_str();
         claim_spi_genre(_isSD);
         if ( (ret = _fs->exists(s)) )
         {
             _fs->remove(s);
             sprintf(path, "%d/urls", id);
-            s = fileName(path).c_str();
+            fnameStr = fileName(path);
+            s = fnameStr.c_str();
             _fs->remove(s);
             sprintf(path, "%d/links", id);
-            s = fileName(path).c_str();
+            fnameStr = fileName(path);
+            s = fnameStr.c_str();
             _fs->remove(s);
         }
         release_spi_genre(_isSD);

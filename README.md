@@ -1,5 +1,11 @@
 # Odroid-Go-Radio
 ## Latest updates
+**20220528**
+You can now use your Odroid-Go-Radio as [Bluetooth stream player](#using-bluetooth). 
+
+Some bugfixes/changes/improvements...
+
+**2021**
 You can now play stations from genre lists (i. e. Pop, Rock, etc...) that are synchronized using a public radio database server (https://www.radio-browser.info/#/). 
 This database has more than 27,000 stations organised in different categories (by region or genre tags). With this addition, you can 
 download stations from that radio database as given by their genre-tag. As a result you can have more station lists
@@ -60,6 +66,7 @@ The connection to the VS1053 is done through the Odroid-header pins as follows (
 	* Base64 (by Arturo Guadalupi, v1.0.0) (new for this release)
 	* ArduinoJson (by Benoit Blanchon, v6.13.0) (new for this release)
 	* LittleFS_esp32 (by lorol v1.0.6) (new for this release) (likely to become part of the ESP32-Core v2.x.x)
+	* https://github.com/pschatzmann/ESP32-A2DP.git (v1.0.7) for Bluetooth-playpack. It looks like this library is not available from the Arduino library manager. You have to download it to your libraries folder fom github yourself.
 
 * Other versions might work too, its just untested. Please let me know if you encounter any difficulties.
 * Select Board "M5Stack-FIRE" and Partition Scheme "Large SPIFFS". In fact, any board definition should be fine, however the ones with
@@ -349,47 +356,52 @@ And remember, if something goes wrong/looks suspicious, you can always use _genr
 ## MENUs
 ### General
 * Menus allow to edit certain parameters of the radio.
-* Menus can be reached by a longpress (ca. 1 sec) on (1) to (4).
+* Menus can be reached by a longpress (ca. 1 sec) on (1) to (4) within radio mode. In Bluetooth mode, any press on (1) to (4) will start the corresponding menu direct.
 * You scroll through the menu entries using (Up) and (Down).
 * The value of the selected entry can be changed using (Left) or (Right).
-* Usally changes are stored in NVS persistently. Within the menu, use (A) to store updated values to NVS.
+* Changes need to be stored to NVS to become persistent. Within the menu, use (A) to store updated values to NVS.
 * Use (B) to cancel menu without writing the changes to NVS.
-* There is a (configurable) timeout that also closes the menu without saving.
+* There is a (configurable) timeout that also closes the menu without saving/cancelling.
 
 ### Menu 1: Settings
 
-* Preset at Start: Select the station to be played at Power On. Can be any preset from A1/(1) to Bx/(4) or LAST to 
+* *Preset at Start*: Select the station to be played at Power On. Can be any preset from A1/(1) to Bx/(4) or LAST to 
 start with last station played (like standard ESP32-Radio implementation)
-* Volume at Start: Select the volume at Power On.
-* Minimum Volue: Select the lower limit of Volume that can be set by pressing (Left) in playing mode. (Can be 0, but 
+* *Volume at Start*: Select the volume at Power On.
+* *Minimum Volume*: Select the lower limit of Volume that can be set by pressing (Left) in playing mode. (Can be 0, but 
 depending on the amplifier/headphones used anything below around 50 is probably not audible at all).
-* Maximum Volume: Select the uper limit of Volume can be set by pressing (Right) in playing mode. (Max. 100)
-* Life Volume Updated: if set to Yes, playing volume will be adjusted to the current value of the menu entry if either of
+* *Maximum Volume*: Select the uper limit of Volume can be set by pressing (Right) in playing mode. (Max. 100)
+* *Life Volume Update*: if set to Yes, playing volume will be adjusted to the current value of the menu entry if either of
 the former 3 Volume entries is the current menu entry. (Can be annoying as this will adjust volume direct if you select 
 any of these entries).
-* Brightness Normal: Display backlight setting for normal operation. 255 is maximum, 0 is invisible.
-* Brightness down time: in seconds: timeout for no user interaction (key press) the display will stay on full brightness before
-dimming down to the dimmed level in normal play mode.
-* Brightness Dimmed: after a configurable timeout the display will be dimmed down to this value. Again, this is only for the
+* *Brightness Normal*: Display backlight setting for normal operation. 255 is maximum, 0 is invisible.
+* *Brightness Dimmed*: after a configurable timeout the display will be dimmed down to this value. Again, this is only for the
 "Normal mode", if the radio is playing with the default radio screen (no menu/popup shown).
-* Brightness up time: if dimmed down, time to ramp up to normal brightness after key press. Can be adjusted in steps of 50 ms
+* *Brightn run-down (s)*: in seconds: timeout for no user interaction (key press) the display will stay on full brightness before
+dimming down to the dimmed level in normal play mode.
+* *Brightn run-up (ms)*: if dimmed down, time to ramp up to normal brightness after key press. Can be adjusted in steps of 50 ms
 from 0 (direct) to 500 msec.
-* Timeout Volume popup: how long (secs) will the volume information stay on display after being changed by pressing (Left) or
-(Right). Valid range: 0 to 60
-* Timeout Menu popup: how long will the menus stay on display without user input (in seconds). Range: 10..32767
-* Timeout Channel list: how long will the Channel list stay on the screen without user input before being cancelled. Range: 5..32767 
-* Timeout Favorites: how long will the contents of the current favorite bank stay on display after a favorite has been
+* *Timeout Volume popup*: how long (secs) will the volume information stay on display after being changed by pressing (Left) or
+(Right). Valid range*: 0 to 60
+* *Timeout Menu popup*: how long will the menus stay on display without user input (in seconds). Range: 10..32767
+* *Timeout Channel list*: how long will the Channel list stay on the screen without user input before being cancelled. Range: 5..32767 
+* *Timeout Favorites*: how long will the contents of the current favorite bank stay on display after a favorite has been
 selected by a shortpress on (1) to (4) or the bank has been switched by pressing (A) or (B) in normal play mode. (3..32767)
-* ChanSelect closes list: If set to "No", the Channel list will stay active after a channel has been selected by pressing (Right).
-* Number fav. Banks: how many banks are associated to button (A) and (B). Defaults to 3, which means there is the possibility
+* *ChanSelect closes list*: If set to "No", the Channel list will stay active after a channel has been selected by pressing (Right).
+* *Number fav. Banks*: how many banks are associated to button (A) and (B). Defaults to 3, which means there is the possibility
 to select 24 favorites from A1/(1)...B3(4). If you are happy with just 8 stations, you can set this value to 1 (to have the
 first 8 presets linked to A1(1)..A1/(4), B1/(1)..B1(4). Maximum value is 9 for 72 presets linked to A1/(1) ... B9/(4).
-* JoyPad speed: set the speed of the JoyPad buttons to Low, Medium or High. This affects all functions these buttons are linked
+* *JoyPad speed*: set the speed of the JoyPad buttons to Low, Medium or High. This affects all functions these buttons are linked
 to (updating volume, updating menu entry, selection from list...)
-* Ignore SD-card: if set to Yes, the lengthy search for mp3-files on SD card will be skipped. Suggested setting if you do not
+* *Ignore SD-card*: if set to Yes, the lengthy search for mp3-files on SD card will be skipped. Suggested setting if you do not
 plan to use the media-player (as there is currently no support in this version to control the player by Odroid buttons).
-* Show debug on Serial: if set to yes, some debug output is shown on Serial. (There is no real reason to set this to No)
-* For information purposes, the current IP is shown at the end of the menu list.
+* *Show debug on Serial*: if set to yes, some debug output is shown on Serial. (There is no real reason to set this to No)
+* *Display flipped*: if set to __yes__, display will show upside down
+* *Audio at start*: can be toggled between __Radio__ (default) and __Bluetooth__ to start either in radio-mode (default) or as Bluetooth player
+* *Connect last BT-source*: if set to __yes__ then in BT mode the last known BT source will be connected if awailable (defaults to __no__)
+* *BT volume*: can be used to set a different start volume for Bluetooth mode. Defaults to __100__
+* *Reset on Vol-Max/Min*: set a timeout (in seconds) after which the radio will reset if the Vol-Up or Vol-Dn button are still pressed even though if already at the maximum (Vol-Up) or minimum (Vol-Dn) volume level. Reset will toggle to the other audio-mode (from Bluetooth to Radio or vice versa). If set to __0__ (default) the reset will be disabled.
+* For information purposes, the current IP is shown at the end of the menu list (only in radio-Mode, in BT-mode WiFi is not available).
 
 ### Menu 2: Preset list
 * Shows all defined presets (from preset_00 to preset_99)
@@ -405,36 +417,26 @@ is shown in addition to the station name.
 
 (You can not enter new stations here. That needs to be done through the configuration webpage as usual.)
 
-### Menu 3: Equalizer/Spectrum analyzer
+### Menu 3: Spectrum analyzer
 
-Here you change the equalizer settings (not yet implemented) and configure the spectrum analyzer.
-
-#### Equalizer
-* Not yet implemented
-
-#### Spectrum Analyzer
-* Show Spectrum Analyzer: if switched to yes, a 14 channel spectrum analyzer will be shown in the radiotext section.
-* Analyzer Speed: defines the update speed of the analyzer from "Disco" (very fast) to "Slug" (about 2 frames per second).
-* Dynamic Brightness: if set to "yes", the brightness of channel bars is altered by its value (the higher the brighter 
+* *Show Spectrum Analyzer*: if switched to yes, a 14 (sometimes 12) channel spectrum analyzer will be shown in the radiotext section.
+* *Analyzer Speed*: defines the update speed of the analyzer from "Disco" (very fast) to "Slug" (about 2 frames per second).
+* *Dynamic Brightness*: if set to "yes", the brightness of channel bars is altered by its value (the higher the brighter 
 a bar will appear).
-* Show Peaks: show additional peak indicator on top of the channel bar.
-* Bar width: the width of channel bars (from 0 to 20). Bars are always shown equidistant (20 points away from each other). 
+* *Show Peaks*: show additional peak indicator on top of the channel bar.
+* *Bar width*: the width of channel bars (from 0 to 20). Bars are always shown equidistant (20 points away from each other). 
 Smaller bars will have spacing in between. 
-* Peak width: the width of the peak indicator (from 0 to 20 or set to "same" to follow the width of the channel bar.
-* Segment Divider width: divides the channel bar in equal segments. Width can be 0 (means no divider) up to 20 or "same" to
+* *Bar color*: set the color of channel bars. 
+* *Peak width*: the width of the peak indicator (from 0 to 20 or set to "same" to follow the width of the channel bar.
+* *Segment Divider width*: divides the channel bar in equal segments. Width can be 0 (means no divider) up to 20 or "same" to
 follow the channel bar width.
-* Segm.Divider color: color of segment divider.
-* Show Radiotext: Show radiotext in addition to spectrum analyzer. Often the radiotext is just two lines or less on the 
-display and usally will not interfere with the spectrum analyzer that stays below normally. Howerver with high peaks 
-or lengthy text, the text might get erased by the analyzer. Text will only be refreshed if send newly by the current
-radiostation.
+* *Segm.Divider color*: color of segment divider.
+* *Show Radiotext*: Show radiotext in addition to spectrum analyzer. 
+* *Disable Text refresh*: Often the radiotext is just two lines or less on the display and usally will not interfere with the spectrum analyzer that stays below normally. However with high peaks or lengthy text, the text might get (partly) erased by the analyzer. Therefore the text will be refreshed twice a second, unless this parameter here is set to __yes__ (then it will only be refreshed once updated by the source host).
 
 Just play around with the settings to adjust to your liking. Note that any change in the menu will be applied directly. 
 If you find the settings to your liking, remember to press (A) to store the settings for next Power On.
 With few stations the equalizer will not work (reproducible). I have not yet found the reason for that issue.
-
-ToDo: Parameter for channel bar color (now blue only).
-
 
 ### Menu 4: Sleep timer
 * Sleep time: from now on in this many minutes the volume will dim to minimum value (and then to 0)
@@ -446,4 +448,27 @@ down to brightness 1, which is still pretty dark).
 will adjust according to the elapsed time.
 
 
+## Using Bluetooth
+### Preconditions
+* You need to install one additional library (pschatzmann/ESP32-ADP) before compiling. It looks like this library is not available from the Arduino library manager. You have to download it to your libraries folder fom github (https://github.com/pschatzmann/ESP32-A2DP.git) yourself.
+* I suggest to use the Board setting "M5Stack-FIRE" and Partition Scheme "Large SPIFFS" for compilation.
+
+### Limitations
+* You can not start BT and WiFi at the same time. You have to decide (at startup) wether you want to use BT or Radio functionality.
+* You can also not switch from one mode to another without a reset (SW or PowerOn).
+
+### Entering Bluetooth playback
+* The default mode at startup can be defined using [Menu 1](#menu-1-settings) There are a few more entries now  in this menu:
+	- *Audio at start*: can be toggled between __Radio__ (default) and __Bluetooth__
+	- *Connect last BT-source*: if set to __yes__ then in BT mode the last known BT source will be connected if available (defaults to __no__)
+	- *BT volume*: can be used to set a different start volume for Bluetooth mode. Defaults to __100__
+	- *Reset on Vol-Max/Min*: sets a timeout (in seconds) after which the radio will do a SW-reset if the Vol-Up or Vol-Dn button are still pressed even though if already at the maximum (Vol-Up) or minimum (Vol-Dn) volume level. Reset will toggle to the other audio-mode (from Bluetooth to Radio or vice versa). If set to __0__ (default) this SW-reset will be disabled.
+* At startup time, you can press Button __(B)__ to switch to the other mode, i. e. if __radio__ is defined in the configuration settings, you can start Bluetooth mode (and vice versa). Please observe the screen, the first line at start should now read __Starting Radio__ or __Starting Bluetooth__. If you see this line, you can release button __(B)__ again (roundabout after less than one second).
+* A SW-reset (as described above with Vol-Up/Vol-Dn) will override the *Audio at start*-setting (and consequently also ignore the state of button (B))
+* If the VS1053 module could not be initialized correctly (either not at all or only at slow SPI speed which is insufficient for the BT data stream) the BT-mode will be ignored and the Odroid will start in Radio-mode.
+
+The following will apply if the radio successfully started in Bluetooth mode:
+* The screen has four segments. The top line shows the word "Bluetooth" instead on the right (clock is dependend on WiFi hence not available in BT-Mode). The big second segment will show title info and spectrum analyzer (if enabled in [Menu 3](#menu-3-equalizerspectrum-analyzer)) and BT is playing. The third segment will show the current Bluetooth-connection status and the bottom line will show the current volume.
+* There is no button functionality to control the BT audio source from the Odroid. You can only change the volume (but this will change the volume of the OdroidRadio and not affect the volume setting of the BT-source)
+* As there is no favorite to play after a shortpress on any of (1) to (4) there is no need to differentiate a shortpress or longpress on (1) to (4) in BT mode. Therefore the associated menu is started direct as a result of pressing either (1) to (4).
 
