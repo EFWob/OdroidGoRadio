@@ -205,9 +205,7 @@
 #include <driver/adc.h>
 #include <Update.h>
 #include <base64.h>
-#if defined(ARDUINO_ODROID_ESP32)
 #include "OdroidExtra.h"
-#endif
 
 // Number of entries in the queue
 #define QSIZ 400
@@ -466,6 +464,7 @@ bool              time_req = false ;                     // Set time requested
 uint16_t          adcval ;                               // ADC value (battery voltage)
 uint32_t          clength ;                              // Content length found in http header
 uint32_t          max_mp3loop_time = 0 ;                 // To check max handling time in mp3loop (msec)
+uint32_t          max_led ;                              // To check max led level calculated (following the beat)
 int16_t           scanios ;                              // TEST*TEST*TEST
 int16_t           scaniocount ;                          // TEST*TEST*TEST
 uint16_t          bltimer = 0 ;                          // Backlight time-out counter
@@ -945,7 +944,7 @@ bool VS1053::testComm ( const char *header )
   {
     delta = 3 ;                                         // Fast SPI, more loops
   }
-  for ( i = 0 ; ( i < 0xFFFF ) && ( cnt < 20 ) ; i += delta )
+  for ( i = 0 ; ( i < 0xFFFF ) && ( cnt < 10 ) ; i += delta )
   {
     write_register ( SCI_VOL, i ) ;                     // Write data to SCI_VOL
     r1 = read_register ( SCI_VOL ) ;                    // Read back for the first time
@@ -967,6 +966,7 @@ bool VS1053::testComm ( const char *header )
                vstype[r1] ) ;
     //okay = false ;                                    // Standard codecs not fully supported
   }
+  dbgprint( "VS1053 check returns: %s", okay?"IO":"nIO");
   return ( okay ) ;                                     // Return the result
 }
 
@@ -5614,7 +5614,9 @@ extern int genreId;
     dbgprint ( "scaniocount is %d", scaniocount ) ;
     dbgprint ( "Max. mp3_loop duration is %d", max_mp3loop_time ) ;
     dbgprint ( "%d IR interrupts seen", ir_intcount ) ;
+    dbgprint ( "Max LED level: 0x%04X (set to 0 now)", max_led );
     max_mp3loop_time = 0 ;                            // Start new check
+    max_led = 0;
   }
   // Commands for bass/treble control
   else if ( argument.startsWith ( "tone" ) )          // Tone command

@@ -164,10 +164,13 @@ class SpectrumAnalyzer {
      bool txtRefresh() {return _txtRefreshDisabled;}; 
      int16_t getBarColor() {return getColor(_showColor);};
      void fastDrop(bool fast) {_fastDrop = fast;}; 
+     inline uint32_t readTotal() {return _totalx2;};
+     bool readBands();
+
    protected:
+     uint32_t _totalx2 = 0;
     const uint8_t _speedMap[6] = {0, 25, 50, 100, 200, 500};
     uint8_t _showSpeed = 3;
-    bool readBands();
     const uint8_t SCI_WRAM          = 0x6 ;
     const uint8_t SCI_WRAMADDR      = 0x7 ;    
     uint8_t _bands = 14;
@@ -575,7 +578,7 @@ struct odroidRadioConfig20220519 {
 };
 
 
-struct {
+struct odroidRadioConfig20230216{
   struct {
     int16_t min = 50;
     int16_t max = 100;
@@ -640,7 +643,76 @@ struct {
     int16_t volume = 100;
     int16_t volumeReset = 0;
   } bluetooth;
+};
+
+
+struct {
+  struct {
+    int16_t min = 50;
+    int16_t max = 100;
+    int16_t start = 80;
+    int16_t useStart = 1;
+    int16_t life = 0;
+  } volume;
+  struct {
+    int16_t preset = 3;
+    int16_t volume = 1;
+    int16_t chanList = 15;
+    int16_t menu = 15;
+    int16_t brightness = 4;
+    int16_t brightnessUp = 250; 
+  } showtime;
+
+  struct {
+    int16_t time = 6;           // 6 * 5 = 30 min
+    int16_t volume = 80;        // initial volume
+    int16_t offAfter1Min = 1;   // display off after 1 minute idle time in sleep mode?
+  } sleep;
+  struct {
+    int16_t max = 255;            // maximum Backlight value
+    int16_t min = 255;            // minimum backlight value (if equal to max, effectively no dimming will happen)
+  } backlight;
+
+  struct {
+    int16_t closeListOnSelect = 1;
+    int16_t favBanks = 3;
+    int16_t ignoreSD = 1;
+    int16_t keySpeed = 2;
+    int16_t debug = 1;
+    int16_t flipped = 1;
+  } misc;
+  struct {
+    int16_t preset = 1;
+  } start;
+  struct {
+    int16_t showSpectrumAnalyzer = 1;
+    int16_t spectrumAnalyzerSpeed = 2;
+    int16_t spectrumAnalyzerDynamic = 1;
+    int16_t spectrumAnalyzerPeaks = 1;
+    int16_t spectrumAnalyzerSegmentWidth = -1;
+    int16_t spectrumAnalyzerWidth = 20;
+    int16_t spectrumAnalyzerText = 1;
+    int16_t spectrumAnalyzerPeakWidth = -1;
+    int16_t spectrumAnalyzerSegmentColor = 0;
+    int16_t spectrumAnalyzerBarColor = 5;  
+    int16_t spectrumAnalyzerFastDrop = 0;
+    int16_t spectrumAnalyzerTxtRefreshDisabled = 0; // was (unused) "eq0 = 0;" before
+    int16_t showLED = 0; // was (unused) "eq1 = 0;" before
+    int16_t eq2 = 0;
+    int16_t eq3 = 0;
+    int16_t eq4 = 0;
+    int16_t eq5 = 0;
+    int16_t eq6 = 0;
+    int16_t eq7 = 0;
+  } equalizer;
+  struct {
+    int16_t audioMode = 0;
+    int16_t autoConnect = 0;
+    int16_t volume = 100;
+    int16_t volumeReset = 0;
+  } bluetooth;
 } odroidRadioConfig;
+
 
 
 
@@ -858,7 +930,7 @@ class RadioMenuEntry {
 
     
   protected:
-    char _valueStr[10];
+    char _valueStr[20];
     RadioMenuEntry *_prev;
     RadioMenuEntry *_next;
     int16_t *_reference;
@@ -950,6 +1022,22 @@ class RadioMenuEntrySpectrumSpeed : public RadioMenuEntry {
 
 };
 
+class RadioMenuEntrySpectrumLed : public RadioMenuEntry {
+  public:
+    RadioMenuEntrySpectrumLed(char* txt, int16_t *reference):
+          RadioMenuEntry(txt, reference, 0, 6) {};
+
+    virtual char *getValueString() {
+    char *values[] = {"off", "beat", "if Spectrum", "if NOT Spectr.", "if Sp. hidden", "if NOT hidden", "always ON"}; 
+      if (_reference) {
+        sprintf(_valueStr, "%14s", values[_value]);
+      } else
+        strcpy(_valueStr, "");
+      return _valueStr;
+    };
+
+};
+
 
 class RadioMenuEntrySpectrumColor : public RadioMenuEntry {
   public:
@@ -960,7 +1048,6 @@ class RadioMenuEntrySpectrumColor : public RadioMenuEntry {
                 read();
               }
             };
-
     virtual char *getValueString() {
     char *values[] = {"Black", "White", "Grey", "Red", "Green", "Blue", "Cyan", "Yellow", "Purple", "Olive", "Magenta"}; 
       if (_reference) {
@@ -974,6 +1061,8 @@ class RadioMenuEntrySpectrumColor : public RadioMenuEntry {
     };
   protected:
     bool _blackIsOff;
+
+            
 };
 
 class RadioMenuEntryWidth : public RadioMenuEntry {
@@ -1217,7 +1306,8 @@ class RadioMenu {
         break;
       case MENU_A:
         this->save();
-          //Intentional fall through!
+        radioStatemachine.setState(btnA?RADIOSTATE_MENU_DONE:RADIOSTATE_RUN);
+        break;
       case MENU_B:        
         radioStatemachine.setState(RADIOSTATE_MENU_DONE);
       break;
@@ -1697,6 +1787,8 @@ class RadioMenu3: public RadioMenu {
       addEntry(_segmentColor = new RadioMenuEntrySpectrumColor("Segm.Divider color", &odroidRadioConfig.equalizer.spectrumAnalyzerSegmentColor));
       addEntry(_showText = new RadioMenuEntryBool("Show Radiotext", &odroidRadioConfig.equalizer.spectrumAnalyzerText));
       addEntry(_txtRefreshDisabled = new RadioMenuEntryBool("Disable Text refresh", &odroidRadioConfig.equalizer.spectrumAnalyzerTxtRefreshDisabled));
+      addEntry(_showLed = new RadioMenuEntrySpectrumLed("Blue LED", &odroidRadioConfig.equalizer.showLED));
+      
     };
 
     void menuButton(uint8_t button, uint16_t repeats) {
@@ -1712,6 +1804,7 @@ class RadioMenu3: public RadioMenu {
       int16_t barColor = _showColor->value();
       int16_t fastDrop = _fastDrop->value();
       int16_t txtRefreshDisabled = _txtRefreshDisabled->value();
+      int16_t showLed = _showLed->value();
       RadioMenu::menuButton(button, repeats);
       dbgprint("MenuButton done. Value BarColor: %d (was: %d)", _showColor->value(), barColor);
       if (barColor != _showColor->value())
@@ -1752,6 +1845,7 @@ class RadioMenu3: public RadioMenu {
       RadioMenuEntrySpectrumSpeed* _showSpeed;
       RadioMenuEntryBool* _showText;
       RadioMenuEntryWidth* _peakWidth;
+      RadioMenuEntrySpectrumLed* _showLed;
 };
 
 
@@ -1890,7 +1984,7 @@ void handleBtnAB(uint8_t group, bool released = false) {
   //radioStatemachine.resetStateTime();
   if ((RADIOSTATE_MENU == radioState) || (RADIOSTATE_MENU_DONE == radioState)) {
     if (RADIOSTATE_MENU == radioState)
-      radioStatemachine.menuButton(group?MENU_B:MENU_A,0);
+      radioStatemachine.menuButton(group?MENU_B:MENU_A,released);
     return;
   }
   if ((RADIOSTATE_INIVS == radioState) || (RADIOSTATE_INICONFIG == radioState)) {
@@ -1975,10 +2069,10 @@ void handleBtnAB(uint8_t group, bool released = false) {
 }
 
 
-void handleBtnABToggle(uint8_t group)
+void handleBtnABToggle(uint8_t group, bool released = false)
 {
-  if (RADIOSTATE_MENU == radioStatemachine.getState())
-    handleBtnAB(group, false);
+  if ((RADIOSTATE_MENU == radioStatemachine.getState()) || (RADIOSTATE_MENU_DONE == radioStatemachine.getState()))
+    handleBtnAB(group, released);
   else
     radioStatemachine.resetStateTime();
 }
@@ -2429,9 +2523,15 @@ bool nvsgetOdroid ()
 void odroidSetup() {
     char key[12];
     dbgprint("ODROID setup()");
-    ledcSetup(0, 5000, 8);
+    ledcSetup(0, 12000, 14);
     ledcAttachPin(14, 0);
-    ledcWrite(0, 255);
+    ledcWrite(0, 255 << 8);
+    
+    pinMode(PIN_BLUE_LED, OUTPUT);  
+    ledcSetup(1, 12000, 16);
+    ledcAttachPin(PIN_BLUE_LED, 1);
+    ledcWrite(1, 0);
+    
     for(int i = 0;i < 100;i++) {
       sprintf(key, "preset_%02d", i);
       presetPresent[i] = nvssearch(key);
@@ -2500,10 +2600,10 @@ void odroidSetup() {
     }
     btnA.onLongPressed([](uint16_t) {handleBtnAB(0);}).onLongReleased([]() {handleBtnAB(0, true);})
               //.onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
-              .onToggle([](bool x){if(x) handleBtnABToggle(0);});
+              .onToggle([](bool x){/*if(x)*/ handleBtnABToggle(0, !x);});
     btnB.onLongPressed([](uint16_t) {handleBtnAB(1);}).onLongReleased([]() {handleBtnAB(1, true);})
               //.onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
-              .onToggle([](bool x){if(x) handleBtnABToggle(1);});
+              .onToggle([](bool x){handleBtnABToggle(1, !x);});
 
     
     if (LOW == digitalRead(32)) {
@@ -2829,6 +2929,7 @@ void odroidSetup2(void)
   }
 }
 
+extern int8_t playingstat;
 
 void odroidLoop(void) {    
 static bool first = true;
@@ -2848,9 +2949,9 @@ static bool first = true;
   } else { 
     genreLoop();
     StatemachineLooper.run();
-    claimSPI("spectrum");
-    runSpectrumAnalyzer();
-    releaseSPI();
+    if (playingstat) {
+      runSpectrumAnalyzer();
+    }
     monkeyRun();
   }
 }
@@ -3162,9 +3263,38 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
         else if (brightness != odroidRadioConfig.backlight.max)
           brightness = map(runTime, 0, BRIGHTNESS_RUNUPTIME, odroidRadioConfig.backlight.min,odroidRadioConfig.backlight.max);
     }
-    ledcWrite(0, brightness);    
+    ledcWrite(0, brightness << 8);
+    static uint32_t lastLEDtime = 0;
+    if (millis() - lastLEDtime > 50)
+    {
+      uint16_t value = 0;
+      if (odroidRadioConfig.equalizer.showLED == 6)
+        value = 0x3fff;
+      else if ((odroidRadioConfig.equalizer.showLED != 0) && (playingstat != 0))
+        if (
+          (odroidRadioConfig.equalizer.showLED == 1) || 
+          ((odroidRadioConfig.equalizer.showLED == 2) && odroidRadioConfig.equalizer.showSpectrumAnalyzer) || 
+          ((odroidRadioConfig.equalizer.showLED == 3) && !odroidRadioConfig.equalizer.showSpectrumAnalyzer) ||
+          ((odroidRadioConfig.equalizer.showLED == 4) && odroidRadioConfig.equalizer.showSpectrumAnalyzer && tftdata[TFTSEC_SPECTRUM].hidden) ||
+          ((odroidRadioConfig.equalizer.showLED == 5) && odroidRadioConfig.equalizer.showSpectrumAnalyzer && !tftdata[TFTSEC_SPECTRUM].hidden)
+          )
+        {
+          static uint32_t lastTotal = 0;    
+          extern uint32_t max_led;
+          spectrumAnalyzer.readBands();
+          uint32_t total = spectrumAnalyzer.readTotal();
+          //lastTotal = (total > lastTotal)?total<<4:total<<2;
+          lastTotal = sqrt(total<<6);
+          if (max_led < lastTotal)
+            max_led = lastTotal;
+          value = lastTotal>0x3fff?0x3fff:lastTotal;
+          lastTotal=total;
+        }
+      ledcWrite(1, value);
+      lastLEDtime = millis();
+    }
   }
-
+  
   uint32_t RadioStatemachine::getStateTime() {
     return BasicStatemachine::getStateTime();
   };
@@ -3632,7 +3762,9 @@ void SpectrumAnalyzer::run1() {
 
       if ((y != yOld) || (_spectrum[toDraw][2])) { 
         if (_spectrum[toDraw][2]) {
+            claimSPI("drawspec");  
             tft->fillRect(20 + 20 * toDraw, _spectrum[toDraw][2]-1,20 ,2, TFT_BLACK);
+            releaseSPI();
           if (!_showPeaks)
             _spectrum[toDraw][2] = 0;
           else if (y > _spectrum[toDraw][2]) {
@@ -3645,7 +3777,9 @@ void SpectrumAnalyzer::run1() {
           _spectrum[toDraw][2] = y - 2;
         if (y > yOld) {      // was higher before
 //          if (_showText)
+            claimSPI("drawspec");  
             tft->fillRect(20 + 20 * toDraw, yOld, 20, y - yOld, TFT_BLACK);          
+            releaseSPI();
 //          else
 //            dsp_fillRect(x, yOld, w, y - yOld, TFT_BLACK);
         } /*else if (y < yOld)*/ { 
@@ -3657,7 +3791,9 @@ void SpectrumAnalyzer::run1() {
             if ((val = _spectrum[toDraw][0]) < 16)
               col = (map(val, 0, 15, col & 8, col & 0x1f) & 0x1f) + (map(val, 0, 15, col & 0x100, col & 0x7e0) & 0x7e0) + (map(val, 0, 15, col & 0x4000, col & 0xf800) & 0xf800);
          }
+         claimSPI("drawspec");  
          tft->fillRect(x, y, w, yOld - y, col);
+         releaseSPI();
          if (_showSegments) {
             uint16_t ws, xs, col = getColor(_showSegmentColor);
             if ((_showSegments == -1) || (_showSegments == w)) {
@@ -3666,8 +3802,11 @@ void SpectrumAnalyzer::run1() {
               ws = _showSegments;
               xs = 20 + (10 - ws/2) + 20 * toDraw;
             }
-            for(int i = 156;i > y;i = i - 4)
+            for(int i = 156;i > y;i = i - 4) {
+              claimSPI("drawspec");  
               tft->fillRect ( xs, i, ws, 1, col);
+              releaseSPI();
+            }
          }
         }
         if (_spectrum[toDraw][2] && _peakWidth) {
@@ -3675,7 +3814,9 @@ void SpectrumAnalyzer::run1() {
               w = _peakWidth;
               x = 20 + (10 - w/2) + 20 * toDraw;
             }
+          claimSPI("drawspec");  
           tft->fillRect(x,_spectrum[toDraw][2],w ,1, getColor(_showPeaks));
+          releaseSPI();
         }
       }
       _spectrum[toDraw][1] = _spectrum[toDraw][0];
@@ -3694,6 +3835,11 @@ uint16_t SpectrumAnalyzer::getColor(int16_t code) {
 
 
 void runSpectrumAnalyzer() {
+  if (!odroidRadioConfig.equalizer.showSpectrumAnalyzer && (0 == odroidRadioConfig.equalizer.showLED))
+    return;
+  //claimSPI("spectrum");
+  //spectrumAnalyzer.readBands();  
+  //releaseSPI();
   if (!tftdata[TFTSEC_SPECTRUM].hidden)             // this is only true, if spectrum analyzer should be displayed
     if (spectrumBlockTime)
     {
@@ -3713,14 +3859,24 @@ bool SpectrumAnalyzer::readBands() {
 uint8_t bands;
 static bool readSuccess = true;
      _drawn = 0;
+        claimSPI("specRead");
         vs1053player->write_register(SCI_WRAMADDR, _base+2);
         bands = vs1053player->read_register(SCI_WRAM);
         if (bands <= _bands) {
           vs1053player->write_register(SCI_WRAMADDR, _base+4);
           int8_t skip = (_bands - bands) / 2;
           for (int8_t i = 0; i < _bands; i++) {
-            if ((i >= skip) && (i - skip < bands ))
+            if ((i >= skip) && (i - skip < bands )) {
               _spectrum[i][0] = vs1053player->read_register(SCI_WRAM) & 0x1f;
+              /*uint16_t x = _spectrum[i][0] = vs1053player->read_register(SCI_WRAM) & 0x1f;
+              if (i == skip + 1)
+                _totalx2 = _totalx2 + x * x * x;
+              else if (i == _bands - skip - 1) 
+                _totalx2 = _totalx2 + x * x * x * x * x * x;
+              else if ((i >= _bands / 2 - 1) && (i <= _bands / 2 + 1))
+                _totalx2 = _totalx2 + x * x * x * x ;
+              */
+            }
             else
             {
               if (_spectrum[i][0])  
@@ -3729,7 +3885,18 @@ static bool readSuccess = true;
             _spectrum[i][3] = 0;
             
           }
+          releaseSPI();
+          uint16_t x = _spectrum[skip][0];
+          _totalx2 = x * x * x;
+          x = _spectrum[_bands - skip - 2][0];
+          _totalx2 = x * x * x * x * x * x;
+          for (int i = 0;i < 3;i++) {
+            x = _spectrum[_bands / 2 - 1 + i][0];
+            _totalx2 = _totalx2 + x * x * x * x;
+          }
+          //ledcWrite(1, (uint32_t)(sqrt(totalx2>>4)));
         } else {
+          releaseSPI();
           if (readSuccess)
             dbgprint("Spectrum analyzer read failed! Bands: %d", bands);
           readSuccess = false;

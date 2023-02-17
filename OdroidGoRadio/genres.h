@@ -1,6 +1,8 @@
 #ifndef __GENRES_H_
 #define __GENRES_H_
 #include <LITTLEFS.h> 
+//#include <LittleFS.h>
+//#define LITTLEFS LittleFS
 
 #define MAX_GENRES 1000
 //#define URL_CHUNKSIZE 10
@@ -35,7 +37,7 @@ friend class Genres;
         bool disable() {return _disable;}; 
         void toNVS();
         void info();
-        String asJson();
+        String asJson(); 
     protected:
         Genres *_genres = NULL; 
         char *_rdbs = NULL;
