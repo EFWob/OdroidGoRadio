@@ -3265,7 +3265,7 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
     }
     ledcWrite(0, brightness << 8);
     static uint32_t lastLEDtime = 0;
-    if (millis() - lastLEDtime > 100)
+    if (millis() - lastLEDtime > 50)
     {
       uint16_t value = 0;
       if (odroidRadioConfig.equalizer.showLED == 6)
@@ -3865,16 +3865,17 @@ static bool readSuccess = true;
         if (bands <= _bands) {
           vs1053player->write_register(SCI_WRAMADDR, _base+4);
           int8_t skip = (_bands - bands) / 2;
-          _totalx2 = 0;
           for (int8_t i = 0; i < _bands; i++) {
             if ((i >= skip) && (i - skip < bands )) {
-              uint16_t x = _spectrum[i][0] = vs1053player->read_register(SCI_WRAM) & 0x1f;
-              if (i == skip + 2)
-                _totalx2 = _totalx2 + x * x ;
-              else if (i == bands - skip - 2) 
+              _spectrum[i][0] = vs1053player->read_register(SCI_WRAM) & 0x1f;
+              /*uint16_t x = _spectrum[i][0] = vs1053player->read_register(SCI_WRAM) & 0x1f;
+              if (i == skip + 1)
+                _totalx2 = _totalx2 + x * x * x;
+              else if (i == _bands - skip - 1) 
                 _totalx2 = _totalx2 + x * x * x * x * x * x;
-              else if (i == bands / 2)
-                _totalx2 = _totalx2 + x * x * x  ;
+              else if ((i >= _bands / 2 - 1) && (i <= _bands / 2 + 1))
+                _totalx2 = _totalx2 + x * x * x * x ;
+              */
             }
             else
             {
@@ -3885,6 +3886,14 @@ static bool readSuccess = true;
             
           }
           releaseSPI();
+          uint16_t x = _spectrum[skip][0];
+          _totalx2 = x * x * x;
+          x = _spectrum[_bands - skip - 2][0];
+          _totalx2 = x * x * x * x * x * x;
+          for (int i = 0;i < 3;i++) {
+            x = _spectrum[_bands / 2 - 1 + i][0];
+            _totalx2 = _totalx2 + x * x * x * x;
+          }
           //ledcWrite(1, (uint32_t)(sqrt(totalx2>>4)));
         } else {
           releaseSPI();

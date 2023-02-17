@@ -4,7 +4,7 @@
 - compatibility issues found with recent ESP32 core 2.0.x. Currently the only workaround is to use core 1.0.6. See a bit more in section 
   [Compiling](#compiling)
 - The blue onboard-LED can now flicker following the beat of the music. [See below.](#blue-led)
-- Some bug fixes to improve overall robustness.
+- Some changes to improve overall robustness.
 
 **20220528**
 You can now use your Odroid-Go-Radio as [Bluetooth stream player](#using-bluetooth). 
