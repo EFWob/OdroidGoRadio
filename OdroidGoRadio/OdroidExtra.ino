@@ -1025,10 +1025,10 @@ class RadioMenuEntrySpectrumSpeed : public RadioMenuEntry {
 class RadioMenuEntrySpectrumLed : public RadioMenuEntry {
   public:
     RadioMenuEntrySpectrumLed(char* txt, int16_t *reference):
-          RadioMenuEntry(txt, reference, 0, 5) {};
+          RadioMenuEntry(txt, reference, 0, 6) {};
 
     virtual char *getValueString() {
-    char *values[] = {"Off", "ON", "if Spectrum", "if NOT Spectr.", "if Sp. hidden", "if NOT hidden"}; 
+    char *values[] = {"off", "beat", "if Spectrum", "if NOT Spectr.", "if Sp. hidden", "if NOT hidden", "always ON"}; 
       if (_reference) {
         sprintf(_valueStr, "%14s", values[_value]);
       } else
@@ -1306,7 +1306,8 @@ class RadioMenu {
         break;
       case MENU_A:
         this->save();
-          //Intentional fall through!
+        radioStatemachine.setState(btnA?RADIOSTATE_MENU_DONE:RADIOSTATE_RUN);
+        break;
       case MENU_B:        
         radioStatemachine.setState(RADIOSTATE_MENU_DONE);
       break;
@@ -1983,7 +1984,7 @@ void handleBtnAB(uint8_t group, bool released = false) {
   //radioStatemachine.resetStateTime();
   if ((RADIOSTATE_MENU == radioState) || (RADIOSTATE_MENU_DONE == radioState)) {
     if (RADIOSTATE_MENU == radioState)
-      radioStatemachine.menuButton(group?MENU_B:MENU_A,0);
+      radioStatemachine.menuButton(group?MENU_B:MENU_A,released);
     return;
   }
   if ((RADIOSTATE_INIVS == radioState) || (RADIOSTATE_INICONFIG == radioState)) {
@@ -2068,10 +2069,10 @@ void handleBtnAB(uint8_t group, bool released = false) {
 }
 
 
-void handleBtnABToggle(uint8_t group)
+void handleBtnABToggle(uint8_t group, bool released = false)
 {
-  if (RADIOSTATE_MENU == radioStatemachine.getState())
-    handleBtnAB(group, false);
+  if ((RADIOSTATE_MENU == radioStatemachine.getState()) || (RADIOSTATE_MENU_DONE == radioStatemachine.getState()))
+    handleBtnAB(group, released);
   else
     radioStatemachine.resetStateTime();
 }
@@ -2599,10 +2600,10 @@ void odroidSetup() {
     }
     btnA.onLongPressed([](uint16_t) {handleBtnAB(0);}).onLongReleased([]() {handleBtnAB(0, true);})
               //.onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
-              .onToggle([](bool x){if(x) handleBtnABToggle(0);});
+              .onToggle([](bool x){/*if(x)*/ handleBtnABToggle(0, !x);});
     btnB.onLongPressed([](uint16_t) {handleBtnAB(1);}).onLongReleased([]() {handleBtnAB(1, true);})
               //.onToggle([](bool x){if(x) radioStatemachine.resetStateTime();});
-              .onToggle([](bool x){if(x) handleBtnABToggle(1);});
+              .onToggle([](bool x){handleBtnABToggle(1, !x);});
 
     
     if (LOW == digitalRead(32)) {
@@ -3263,24 +3264,35 @@ char *radiostateNames[] = {"Start", "Normal operation", "Show Volume", "Show Pre
           brightness = map(runTime, 0, BRIGHTNESS_RUNUPTIME, odroidRadioConfig.backlight.min,odroidRadioConfig.backlight.max);
     }
     ledcWrite(0, brightness << 8);
-    uint16_t value = 0;
-    if ((odroidRadioConfig.equalizer.showLED != 0) && (playingstat != 0))
-      if (
-        (odroidRadioConfig.equalizer.showLED == 1) || 
-        ((odroidRadioConfig.equalizer.showLED == 2) && odroidRadioConfig.equalizer.showSpectrumAnalyzer) || 
-        ((odroidRadioConfig.equalizer.showLED == 3) && !odroidRadioConfig.equalizer.showSpectrumAnalyzer) ||
-        ((odroidRadioConfig.equalizer.showLED == 4) && odroidRadioConfig.equalizer.showSpectrumAnalyzer && tftdata[TFTSEC_SPECTRUM].hidden) ||
-        ((odroidRadioConfig.equalizer.showLED == 5) && odroidRadioConfig.equalizer.showSpectrumAnalyzer && !tftdata[TFTSEC_SPECTRUM].hidden)
-        )
-      {
-        static uint32_t lastTotal = 0;    
-        uint32_t total = spectrumAnalyzer.readTotal();
-        //lastTotal = (total > lastTotal)?total<<4:total<<2;
-        lastTotal = sqrt(total<<7);
-        value = lastTotal>0x3fff?0x3fff:lastTotal;
-        lastTotal=total;
-      }
-    ledcWrite(1, value);
+    static uint32_t lastLEDtime = 0;
+    if (millis() - lastLEDtime > 100)
+    {
+      uint16_t value = 0;
+      if (odroidRadioConfig.equalizer.showLED == 6)
+        value = 0x3fff;
+      else if ((odroidRadioConfig.equalizer.showLED != 0) && (playingstat != 0))
+        if (
+          (odroidRadioConfig.equalizer.showLED == 1) || 
+          ((odroidRadioConfig.equalizer.showLED == 2) && odroidRadioConfig.equalizer.showSpectrumAnalyzer) || 
+          ((odroidRadioConfig.equalizer.showLED == 3) && !odroidRadioConfig.equalizer.showSpectrumAnalyzer) ||
+          ((odroidRadioConfig.equalizer.showLED == 4) && odroidRadioConfig.equalizer.showSpectrumAnalyzer && tftdata[TFTSEC_SPECTRUM].hidden) ||
+          ((odroidRadioConfig.equalizer.showLED == 5) && odroidRadioConfig.equalizer.showSpectrumAnalyzer && !tftdata[TFTSEC_SPECTRUM].hidden)
+          )
+        {
+          static uint32_t lastTotal = 0;    
+          extern uint32_t max_led;
+          spectrumAnalyzer.readBands();
+          uint32_t total = spectrumAnalyzer.readTotal();
+          //lastTotal = (total > lastTotal)?total<<4:total<<2;
+          lastTotal = sqrt(total<<6);
+          if (max_led < lastTotal)
+            max_led = lastTotal;
+          value = lastTotal>0x3fff?0x3fff:lastTotal;
+          lastTotal=total;
+        }
+      ledcWrite(1, value);
+      lastLEDtime = millis();
+    }
   }
   
   uint32_t RadioStatemachine::getStateTime() {
@@ -3730,7 +3742,7 @@ void SpectrumAnalyzer::run1() {
     if (!_lastRun || (millis() - _lastRun >= _speedMap[_showSpeed])) {
   
       //claimSPI("spectrum");
-      //readBands();
+      readBands();
       //releaseSPI();
       _lastRun = millis();
     //hack
@@ -3742,7 +3754,6 @@ void SpectrumAnalyzer::run1() {
             if (RADIOSTATE_VOLUME != radioStatemachine.getState())
               showRadiotext("", 500);
       }
-    claimSPI("drawspec");  
     for(uint8_t toDraw = 0;toDraw < 14;toDraw++) {
       uint16_t w = _barWidth;
       uint16_t x = 20 + (10 - w/2) + 20 * toDraw;
@@ -3751,7 +3762,9 @@ void SpectrumAnalyzer::run1() {
 
       if ((y != yOld) || (_spectrum[toDraw][2])) { 
         if (_spectrum[toDraw][2]) {
+            claimSPI("drawspec");  
             tft->fillRect(20 + 20 * toDraw, _spectrum[toDraw][2]-1,20 ,2, TFT_BLACK);
+            releaseSPI();
           if (!_showPeaks)
             _spectrum[toDraw][2] = 0;
           else if (y > _spectrum[toDraw][2]) {
@@ -3764,7 +3777,9 @@ void SpectrumAnalyzer::run1() {
           _spectrum[toDraw][2] = y - 2;
         if (y > yOld) {      // was higher before
 //          if (_showText)
+            claimSPI("drawspec");  
             tft->fillRect(20 + 20 * toDraw, yOld, 20, y - yOld, TFT_BLACK);          
+            releaseSPI();
 //          else
 //            dsp_fillRect(x, yOld, w, y - yOld, TFT_BLACK);
         } /*else if (y < yOld)*/ { 
@@ -3776,7 +3791,9 @@ void SpectrumAnalyzer::run1() {
             if ((val = _spectrum[toDraw][0]) < 16)
               col = (map(val, 0, 15, col & 8, col & 0x1f) & 0x1f) + (map(val, 0, 15, col & 0x100, col & 0x7e0) & 0x7e0) + (map(val, 0, 15, col & 0x4000, col & 0xf800) & 0xf800);
          }
+         claimSPI("drawspec");  
          tft->fillRect(x, y, w, yOld - y, col);
+         releaseSPI();
          if (_showSegments) {
             uint16_t ws, xs, col = getColor(_showSegmentColor);
             if ((_showSegments == -1) || (_showSegments == w)) {
@@ -3785,8 +3802,11 @@ void SpectrumAnalyzer::run1() {
               ws = _showSegments;
               xs = 20 + (10 - ws/2) + 20 * toDraw;
             }
-            for(int i = 156;i > y;i = i - 4)
+            for(int i = 156;i > y;i = i - 4) {
+              claimSPI("drawspec");  
               tft->fillRect ( xs, i, ws, 1, col);
+              releaseSPI();
+            }
          }
         }
         if (_spectrum[toDraw][2] && _peakWidth) {
@@ -3794,14 +3814,15 @@ void SpectrumAnalyzer::run1() {
               w = _peakWidth;
               x = 20 + (10 - w/2) + 20 * toDraw;
             }
+          claimSPI("drawspec");  
           tft->fillRect(x,_spectrum[toDraw][2],w ,1, getColor(_showPeaks));
+          releaseSPI();
         }
       }
       _spectrum[toDraw][1] = _spectrum[toDraw][0];
     
     }
     }
-    releaseSPI();
 }
 
 uint16_t SpectrumAnalyzer::getColor(int16_t code) {
@@ -3816,9 +3837,9 @@ uint16_t SpectrumAnalyzer::getColor(int16_t code) {
 void runSpectrumAnalyzer() {
   if (!odroidRadioConfig.equalizer.showSpectrumAnalyzer && (0 == odroidRadioConfig.equalizer.showLED))
     return;
-  claimSPI("spectrum");
-  spectrumAnalyzer.readBands();  
-  releaseSPI();
+  //claimSPI("spectrum");
+  //spectrumAnalyzer.readBands();  
+  //releaseSPI();
   if (!tftdata[TFTSEC_SPECTRUM].hidden)             // this is only true, if spectrum analyzer should be displayed
     if (spectrumBlockTime)
     {
@@ -3838,6 +3859,7 @@ bool SpectrumAnalyzer::readBands() {
 uint8_t bands;
 static bool readSuccess = true;
      _drawn = 0;
+        claimSPI("specRead");
         vs1053player->write_register(SCI_WRAMADDR, _base+2);
         bands = vs1053player->read_register(SCI_WRAM);
         if (bands <= _bands) {
@@ -3847,12 +3869,12 @@ static bool readSuccess = true;
           for (int8_t i = 0; i < _bands; i++) {
             if ((i >= skip) && (i - skip < bands )) {
               uint16_t x = _spectrum[i][0] = vs1053player->read_register(SCI_WRAM) & 0x1f;
-              if (i == skip)
+              if (i == skip + 2)
                 _totalx2 = _totalx2 + x * x ;
               else if (i == bands - skip - 2) 
-                _totalx2 = _totalx2 + x * x * x * x * x ;
+                _totalx2 = _totalx2 + x * x * x * x * x * x;
               else if (i == bands / 2)
-                _totalx2 = _totalx2 + x * x * x * x ;
+                _totalx2 = _totalx2 + x * x * x  ;
             }
             else
             {
@@ -3862,8 +3884,10 @@ static bool readSuccess = true;
             _spectrum[i][3] = 0;
             
           }
+          releaseSPI();
           //ledcWrite(1, (uint32_t)(sqrt(totalx2>>4)));
         } else {
+          releaseSPI();
           if (readSuccess)
             dbgprint("Spectrum analyzer read failed! Bands: %d", bands);
           readSuccess = false;

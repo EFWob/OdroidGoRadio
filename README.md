@@ -4,6 +4,7 @@
 - compatibility issues found with recent ESP32 core 2.0.x. Currently the only workaround is to use core 1.0.6. See a bit more in section 
   [Compiling](#compiling)
 - The blue onboard-LED can now flicker following the beat of the music. [See below.](#blue-led)
+- Some bug fixes to improve overall robustness.
 
 **20220528**
 You can now use your Odroid-Go-Radio as [Bluetooth stream player](#using-bluetooth). 
@@ -454,10 +455,11 @@ With few stations the equalizer will not work (reproducible). I have not yet fou
 The menu item "Blue LED" of the [spectrum analyzer menu](#menu3) defines the behaviour of the blue onboard-LED:
 * *off*: the LED will stay off (this is the default setting).
 * *beat*: the blue LED will always flicker to the beat of the music.
-* *if Spectrum*: the blue LED will flicker, if the spectrum analyzer is enabled.
+* *if Spectrum*: the blue LED will flicker, but only if the spectrum analyzer is enabled.
 * *if NOT Spectr.*: the blue LED will flicker, if the spectrum analyzer is NOT enabled.
-* *if Sp. hidden*: the blue LED will flicker, if the spectrum analyzer is enabled but currently hidden (by a menu for instance)
-* *if NOT hidden*: LED will flicker, if the spectrum analyzer is enabled and currently visible (i. e. not hidden by another screen)
+* *if Sp. hidden*: the blue LED will flicker, if the spectrum analyzer is enabled but currently hidden (by a menu for instance).
+* *if NOT hidden*: LED will flicker, if the spectrum analyzer is enabled and currently visible (i. e. not hidden by another screen).
+* *always ON*: LED is always lit at full brightness (independent of sound level).
 
 The brightness is not influenced by the current volume setting. The update rate is always the same, no matter what the current speed
 setting of the spectrum analyzer is.

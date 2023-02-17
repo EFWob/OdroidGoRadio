@@ -464,6 +464,7 @@ bool              time_req = false ;                     // Set time requested
 uint16_t          adcval ;                               // ADC value (battery voltage)
 uint32_t          clength ;                              // Content length found in http header
 uint32_t          max_mp3loop_time = 0 ;                 // To check max handling time in mp3loop (msec)
+uint32_t          max_led ;                              // To check max led level calculated (following the beat)
 int16_t           scanios ;                              // TEST*TEST*TEST
 int16_t           scaniocount ;                          // TEST*TEST*TEST
 uint16_t          bltimer = 0 ;                          // Backlight time-out counter
@@ -5613,7 +5614,9 @@ extern int genreId;
     dbgprint ( "scaniocount is %d", scaniocount ) ;
     dbgprint ( "Max. mp3_loop duration is %d", max_mp3loop_time ) ;
     dbgprint ( "%d IR interrupts seen", ir_intcount ) ;
+    dbgprint ( "Max LED level: 0x%04X (set to 0 now)", max_led );
     max_mp3loop_time = 0 ;                            // Start new check
+    max_led = 0;
   }
   // Commands for bass/treble control
   else if ( argument.startsWith ( "tone" ) )          // Tone command
