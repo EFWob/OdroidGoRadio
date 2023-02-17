@@ -1,5 +1,10 @@
 # Odroid-Go-Radio
 ## Latest updates
+**20230218**
+- compatibility issues found with recent ESP32 core 2.0.x. Currently the only workaround is to use core 1.0.6. See a bit more in section 
+  [Compiling](#compiling)
+- The blue onboard-LED can now flicker following the beat of the music. [See below.](#blue-led)
+
 **20220528**
 You can now use your Odroid-Go-Radio as [Bluetooth stream player](#using-bluetooth). 
 
@@ -59,13 +64,18 @@ The connection to the VS1053 is done through the Odroid-header pins as follows (
 
 ## Compiling
 * Arduino-IDE v1.8 or later (tested v1.8.5, required at least v1.8.0)
-* ESP32-Core (tested v1.0.6)
+* ESP32-Core (tested v1.0.6) _WILL NOT COMPILE/RUN using core v2.0.x or above!_
+  You have to explicitely switch back to core v1.0.6 (open menu _Tools/Board "xxx"/Boards manager_, search for ESP32 and install version
+  1.0.6 for compiling). Main reason: the integration of LittleFS has changed (was a library before core v2.0.x and is now integrated into
+  the core). At compile time there is no way to identify the current core version to integrate the correct API. As I also had another 
+  serious issue with the new core (endless reset loop) I suspect that there might be even more incompatibilities under the hood. Therefore
+  the decision (as of now) was to stick with the older core as it is running fine otherwise.
 * Other libraries needed:
 	* time.h (Michael Margolis, maintainer Paul Stoffregen, v1.5.0)
 	* PubSubClient.h (by Nick O'Leary, v2.7.0)
 	* Base64 (by Arturo Guadalupi, v1.0.0) (new for this release)
 	* ArduinoJson (by Benoit Blanchon, v6.13.0) (new for this release)
-	* LittleFS_esp32 (by lorol v1.0.6) (new for this release) (likely to become part of the ESP32-Core v2.x.x)
+	* LittleFS_esp32 (by lorol v1.0.6) 
 	* https://github.com/pschatzmann/ESP32-A2DP.git (v1.0.7) for Bluetooth-playpack. It looks like this library is not available from the Arduino library manager. You have to download it to your libraries folder fom github yourself.
 
 * Other versions might work too, its just untested. Please let me know if you encounter any difficulties.
@@ -433,10 +443,24 @@ follow the channel bar width.
 * *Segm.Divider color*: color of segment divider.
 * *Show Radiotext*: Show radiotext in addition to spectrum analyzer. 
 * *Disable Text refresh*: Often the radiotext is just two lines or less on the display and usally will not interfere with the spectrum analyzer that stays below normally. However with high peaks or lengthy text, the text might get (partly) erased by the analyzer. Therefore the text will be refreshed twice a second, unless this parameter here is set to __yes__ (then it will only be refreshed once updated by the source host).
+* *Blue LED*: controls the behaviour of the blue onboard-LED ([see below for details](#blue-led)).
 
 Just play around with the settings to adjust to your liking. Note that any change in the menu will be applied directly. 
 If you find the settings to your liking, remember to press (A) to store the settings for next Power On.
 With few stations the equalizer will not work (reproducible). I have not yet found the reason for that issue.
+
+#### Blue LED
+
+The menu item "Blue LED" of the [spectrum analyzer menu](#menu3) defines the behaviour of the blue onboard-LED:
+* *off*: the LED will stay off (this is the default setting).
+* *beat*: the blue LED will always flicker to the beat of the music.
+* *if Spectrum*: the blue LED will flicker, if the spectrum analyzer is enabled.
+* *if NOT Spectr.*: the blue LED will flicker, if the spectrum analyzer is NOT enabled.
+* *if Sp. hidden*: the blue LED will flicker, if the spectrum analyzer is enabled but currently hidden (by a menu for instance)
+* *if NOT hidden*: LED will flicker, if the spectrum analyzer is enabled and currently visible (i. e. not hidden by another screen)
+
+The brightness is not influenced by the current volume setting. The update rate is always the same, no matter what the current speed
+setting of the spectrum analyzer is.
 
 ### Menu 4: Sleep timer
 * Sleep time: from now on in this many minutes the volume will dim to minimum value (and then to 0)

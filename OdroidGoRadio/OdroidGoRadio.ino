@@ -205,9 +205,7 @@
 #include <driver/adc.h>
 #include <Update.h>
 #include <base64.h>
-#if defined(ARDUINO_ODROID_ESP32)
 #include "OdroidExtra.h"
-#endif
 
 // Number of entries in the queue
 #define QSIZ 400
@@ -945,7 +943,7 @@ bool VS1053::testComm ( const char *header )
   {
     delta = 3 ;                                         // Fast SPI, more loops
   }
-  for ( i = 0 ; ( i < 0xFFFF ) && ( cnt < 20 ) ; i += delta )
+  for ( i = 0 ; ( i < 0xFFFF ) && ( cnt < 10 ) ; i += delta )
   {
     write_register ( SCI_VOL, i ) ;                     // Write data to SCI_VOL
     r1 = read_register ( SCI_VOL ) ;                    // Read back for the first time
@@ -967,6 +965,7 @@ bool VS1053::testComm ( const char *header )
                vstype[r1] ) ;
     //okay = false ;                                    // Standard codecs not fully supported
   }
+  dbgprint( "VS1053 check returns: %s", okay?"IO":"nIO");
   return ( okay ) ;                                     // Return the result
 }
 
